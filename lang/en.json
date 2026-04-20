@@ -1,0 +1,10 @@
+{
+  "DAAVY_ADDONS": {
+    "Settings": {
+      "TargetHelperAutomations": {
+        "Name": "Target Helper Automations",
+        "Hint": "Automatically rolls saves and applies damage for supported PF2e Toolbelt Target Helper actions."
+      }
+    }
+  }
+}

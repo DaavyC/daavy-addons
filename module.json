@@ -1,0 +1,58 @@
+{
+  "id": "daavy-addons",
+  "title": "Daavy's Addons",
+  "description": "<p>A collection of extra Foundry VTT features, from standalone tools to community integrations.</p>",
+  "version": "1.0",
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14",
+    "maximum": "14"
+  },
+  "authors": [
+    {
+      "name": "Daavy",
+      "discord": "daavy",
+      "flags": {}
+    }
+  ],
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json",
+      "flags": {}
+    }
+  ],
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system",
+        "compatibility": {}
+      }
+    ],
+    "recommends": [
+      {
+        "id": "xdy-pf2e-workbench",
+        "type": "module",
+        "compatibility": {}
+      }
+    ],
+    "requires": [
+      {
+        "id": "pf2e-toolbelt",
+        "type": "module",
+        "compatibility": {}
+      }
+    ]
+  },
+  "license": "LICENSE",
+  "readme": "README.md",
+  "url": "https://github.com/DaavyC/daavy-addons",
+  "manifest": "https://github.com/DaavyC/daavy-addons/raw/main/module.json",
+  "download": "https://github.com/DaavyC/daavy-addons/archive/refs/heads/main.zip",
+  "flags": {}
+}
