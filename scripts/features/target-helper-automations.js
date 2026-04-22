@@ -3,6 +3,7 @@ export const TARGET_HELPER_AUTOMATIONS_SETTING = "targetHelperAutomations";
 
 const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 const DEGREE_OUTCOMES = ["criticalFailure", "failure", "success", "criticalSuccess"];
+const ATTACK_CONTEXT_TYPES = new Set(["attack-roll", "spell-attack", "spell-attack-roll"]);
 
 const SELECTORS = {
   renderedMessage: "[data-message-id]",
@@ -384,6 +385,10 @@ function resolveDamageMode(message) {
     return "basic-save";
   }
 
+  if (hasMatchingAttackMessage(message)) {
+    return "attack-roll";
+  }
+
   return null;
 }
 
@@ -465,15 +470,32 @@ function findAttackOutcome(message, row) {
   return null;
 }
 
+function hasMatchingAttackMessage(message) {
+  const messages = game.messages.contents;
+  const currentIndex = messages.findIndex((candidate) => candidate.id === message.id);
+  if (currentIndex < 1) return false;
+
+  const lowestIndex = Math.max(0, currentIndex - LIMITS.attackLookupWindow);
+  for (let index = currentIndex - 1; index >= lowestIndex; index -= 1) {
+    if (isMatchingAttackMessage(message, messages[index])) return true;
+  }
+
+  return false;
+}
+
 function isMatchingAttackMessage(damageMessage, candidate, targetUuid) {
   if (!candidate?.isCheckRoll) return false;
-  if (candidate.flags?.pf2e?.context?.type !== "attack-roll") return false;
+  if (!isAttackContextType(candidate.flags?.pf2e?.context?.type)) return false;
   if (!sameActor(damageMessage, candidate)) return false;
   if (!sameItem(damageMessage.item, candidate.item)) return false;
 
   if (!targetUuid) return true;
   const candidateTargetUuid = candidate.target?.token?.uuid ?? candidate.target?.uuid ?? null;
   return !candidateTargetUuid || candidateTargetUuid === targetUuid;
+}
+
+function isAttackContextType(value) {
+  return ATTACK_CONTEXT_TYPES.has(value ?? "");
 }
 
 function sameActor(leftMessage, rightMessage) {

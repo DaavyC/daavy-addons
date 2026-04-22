@@ -2,7 +2,7 @@
   "id": "daavy-addons",
   "title": "Daavy's Addons",
   "description": "<p>A collection of extra Foundry VTT features, from standalone tools to community integrations.</p>",
-  "version": "1.0",
+  "version": "1.0.1",
   "compatibility": {
     "minimum": "14",
     "verified": "14",
