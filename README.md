@@ -4,6 +4,10 @@ A collection of extra **Foundry VTT** features, from standalone tools to communi
 
 ---
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/C1I7209LY1)
+
+---
+
 ## 🗂️ Features
 
 - **🎯 Target Helper Automations** — Rolls saves, rolls damage, and applies damage automatically for supported Target Helper chat cards.
