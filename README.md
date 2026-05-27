@@ -20,8 +20,6 @@ A collection of extra **Foundry VTT** features, from standalone tools to communi
 ## ⚙️ Settings
 
 - **Target Helper Automations** — Enables or disables this automation feature.
-- **Scope** — World
-- **Default** — Enabled
 
 ---
 
@@ -32,5 +30,5 @@ A collection of extra **Foundry VTT** features, from standalone tools to communi
 
 ---
 
-> This module was built for personal use with AI-assisted development.
+> This module was built with AI-assisted development.
 > When I add something that is not PF2e-focused, I'll remove the system as a dependency.

@@ -1,57 +1,57 @@
-import { DEGREE_OUTCOMES } from "../utils/target-helper-automation.js";
+import { DEGREE_OUTCOMES } from "./target-helper-automation.js";
 import { SELECTORS } from "./constants.js";
 
-// Converts Foundry HTML wrappers to one element.
+// Converts Foundry/jQuery-like HTML wrappers to a plain HTMLElement.
 export function asHTMLElement(value) {
   if (value instanceof HTMLElement) return value;
   if (value?.[0] instanceof HTMLElement) return value[0];
   return null;
 }
 
-// Finds HTML elements that match a selector.
+// Returns only real HTMLElements from selector results.
 export function getHTMLElements(root, selector) {
   return Array.from(root.querySelectorAll(selector)).filter(isHTMLElement);
 }
 
-// Finds the rendered chat message root.
+// Gets a rendered chat message root by Foundry message id.
 export function getMessageRoot(messageId) {
   return asHTMLElement(document.querySelector(getMessageRootSelector(messageId)));
 }
 
-// Builds a selector for a chat message.
+// Builds a CSS selector safe for Foundry message ids.
 export function getMessageRootSelector(messageId) {
   return `[data-message-id="${escapeCssAttributeValue(messageId)}"]`;
 }
 
-// Escapes a value for a CSS attribute selector.
+// Escapes CSS attribute values even when CSS.escape is unavailable.
 export function escapeCssAttributeValue(value) {
   const stringValue = String(value);
   if (globalThis.CSS?.escape) return globalThis.CSS.escape(stringValue);
   return stringValue.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-// Finds target rows in a chat card.
+// Finds Target Helper rows that can still need saves.
 export function getTargetRows(root) {
   return getHTMLElements(root, SELECTORS.targetRows);
 }
 
-// Finds damage rows in a chat card.
+// Finds Target Helper damage rows.
 export function getDamageRows(root) {
   return getHTMLElements(root, SELECTORS.damageRows);
 }
 
-// Checks if a chat message has save controls.
+// Checks whether a rendered chat card still exposes save buttons.
 export function hasTargetSaveControls(messageId) {
   const messageRootSelector = getMessageRootSelector(messageId);
   return document.querySelector(`${messageRootSelector} ${SELECTORS.targetRows} ${SELECTORS.saveAction}`) !== null;
 }
 
-// Finds the save button in a row.
+// Finds a row-level Target Helper save control.
 export function findSaveControl(row) {
   return asHTMLElement(row.querySelector(SELECTORS.saveAction));
 }
 
-// Reads the degree outcome from a row.
+// Reads PF2e degree-of-success classes from current or nested row state.
 export function extractOutcome(row) {
   const degree = row.querySelector(".degree");
   const classes = degree?.classList ?? row.querySelector(".damage-application")?.classList ?? row.classList;
@@ -60,13 +60,13 @@ export function extractOutcome(row) {
   return DEGREE_OUTCOMES.find((outcome) => classes.contains(outcome)) ?? null;
 }
 
-// Finds a spell damage button in a chat card.
+// Finds the spell damage button after save automation finishes.
 export function findSpellDamageButton(root) {
   const button = root.querySelector(SELECTORS.spellDamageAction);
   return button instanceof HTMLButtonElement ? button : null;
 }
 
-// Finds a matching damage action button.
+// Finds the damage application action button matching a resolved rule.
 export function findActionButton(application, action) {
   return (
     getHTMLElements(application, SELECTORS.actionButton).find((button) =>
@@ -75,12 +75,26 @@ export function findActionButton(application, action) {
   );
 }
 
-// Finds the first damage application in an element.
+// Finds the first target damage application inside a row/card.
 export function findFirstDamageApplication(root) {
   return asHTMLElement(root.querySelector(SELECTORS.damageApplication));
 }
 
-// Checks if a button matches a damage action.
+// Centralizes Target Helper's target uuid extraction from application nodes.
+export function getDamageApplicationTargetUuid(application) {
+  return application?.dataset.targetUuid ?? null;
+}
+
+// Builds a stable row identity for duplicate-click protection.
+export function getTargetRowIdentifier(row, fallback) {
+  return (
+    getDamageApplicationTargetUuid(findFirstDamageApplication(row)) ??
+    row.dataset.targetUuid ??
+    row.querySelector(".name")?.textContent?.trim() ??
+    fallback
+  );
+}
+
 function matchesActionButton(button, action) {
   if (action.type === "multiplier") {
     return button.dataset.action?.endsWith("applyDamage") && button.dataset.multiplier === String(action.multiplier);
@@ -90,12 +104,10 @@ function matchesActionButton(button, action) {
   return (button.dataset.action?.endsWith("applyDamage") && button.dataset.multiplier === "0") || label === "block";
 }
 
-// Normalizes text for simple comparisons.
 function normalizeText(value) {
   return value?.trim().replace(/\s+/g, " ").toLowerCase() ?? "";
 }
 
-// Checks if a value is an HTML element.
 function isHTMLElement(value) {
   return value instanceof HTMLElement;
 }

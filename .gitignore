@@ -1,5 +1,8 @@
-# Local agent instructions
+# Codex
 AGENTS.md
 
-# Test workspace
+# Foundry VTT
+daavy-addons.lock
+
+# Tests
 tests/
