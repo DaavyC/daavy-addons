@@ -14,7 +14,7 @@
   ],
   "url": "https://github.com/DaavyC/daavy-addons",
   "manifest": "https://github.com/DaavyC/daavy-addons/releases/latest/download/module.json",
-  "download": "https://github.com/DaavyC/daavy-addons/releases/download/1.0.3/module.zip",
+  "download": "https://github.com/DaavyC/daavy-addons/releases/download/v14/module.zip",
   "compatibility": {
     "minimum": "14",
     "verified": "14",
