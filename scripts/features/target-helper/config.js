@@ -3,6 +3,13 @@ export const TARGET_HELPER_AUTOMATIONS_SETTING = "targetHelperAutomations";
 
 export const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 
+export const DEGREE_OUTCOMES = Object.freeze([
+  "criticalFailure",
+  "failure",
+  "success",
+  "criticalSuccess"
+]);
+
 export const SELECTORS = {
   renderedMessage: "[data-message-id]",
   targetRows: ".pf2e-toolbelt-target-targetRows .target-row",

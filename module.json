@@ -8,8 +8,7 @@
       "name": "Daavy",
       "discord": "daavy",
       "email": "Daavyc@gmail.com",
-      "url": "https://github.com/DaavyC",
-      "flags": {}
+      "url": "https://github.com/DaavyC"
     }
   ],
   "url": "https://github.com/DaavyC/daavy-addons",
@@ -24,27 +23,24 @@
     "systems": [
       {
         "id": "pf2e",
-        "type": "system",
-        "compatibility": {}
+        "type": "system"
       }
     ],
     "recommends": [
       {
         "id": "xdy-pf2e-workbench",
-        "type": "module",
-        "compatibility": {}
+        "type": "module"
       }
     ],
     "requires": [
       {
         "id": "pf2e-toolbelt",
-        "type": "module",
-        "compatibility": {}
+        "type": "module"
       }
     ]
   },
   "esmodules": [
-    "main.js"
+    "scripts/main.js"
   ],
   "languages": [
     {
@@ -52,6 +48,5 @@
       "name": "English",
       "path": "lang/en.json"
     }
-  ],
-  "flags": {}
+  ]
 }

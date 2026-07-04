@@ -1,4 +1,4 @@
-import { MODULE_ID, TARGET_HELPER_AUTOMATIONS_SETTING } from "./constants.js";
+import { MODULE_ID, TARGET_HELPER_AUTOMATIONS_SETTING } from "./config.js";
 
 // Registers the world setting exposed in Foundry's module configuration.
 export function registerTargetHelperAutomationsSetting() {
@@ -12,9 +12,8 @@ export function registerTargetHelperAutomationsSetting() {
   });
 }
 
-// Reads the automation setting; tests can pass a module id override.
-export function isTargetHelperAutomationsEnabled(moduleId = MODULE_ID) {
-  return game.settings.get(moduleId, TARGET_HELPER_AUTOMATIONS_SETTING) === true;
+export function isTargetHelperAutomationsEnabled() {
+  return game.settings.get(MODULE_ID, TARGET_HELPER_AUTOMATIONS_SETTING) === true;
 }
 
 // PF2e Toolbelt must be active because Target Helper owns the chat card UI.
@@ -26,7 +25,7 @@ export function isToolbeltActive() {
 export function canUseTargetHelperAutomations() {
   return (
     game.user === game.users.activeGM &&
-    isTargetHelperAutomationsEnabled(MODULE_ID) &&
+    isTargetHelperAutomationsEnabled() &&
     isToolbeltActive() &&
     game.toolbelt?.getToolSetting?.("targetHelper", "enabled") === true
   );
