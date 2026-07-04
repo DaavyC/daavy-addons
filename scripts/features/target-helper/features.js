@@ -74,7 +74,8 @@ function applyNextDamage(message, root, mode) {
 }
 
 function findNextDamageApplication(message, row, mode) {
-  const outcome = getRowOutcome(message, row, mode);
+  const outcome = extractOutcome(row)
+    ?? (mode === "attack-roll" ? findAttackOutcome(message, getDamageApplicationTargetUuid(findFirstDamageApplication(row))) : null);
   if (!outcome) return null;
 
   const action = ACTIONS_BY_MODE[mode]?.[outcome] ?? null;
@@ -82,14 +83,6 @@ function findNextDamageApplication(message, row, mode) {
 
   return findPendingDamageApplication(message, row, outcome, action);
 }
-
-function getRowOutcome(message, row, mode) {
-  const outcome = extractOutcome(row);
-  if (outcome) return outcome;
-  if (mode === "attack-roll") return findAttackOutcome(message, getDamageApplicationTargetUuid(findFirstDamageApplication(row)));
-  return null;
-}
-
 function findPendingDamageApplication(message, row, outcome, action) {
   for (const application of getHTMLElements(row, SELECTORS.damageApplication)) {
     if (application.classList.contains("applied")) continue;
@@ -123,15 +116,13 @@ function clickPendingSave(message, root) {
 }
 
 function findPendingSave(message, root) {
-  const rows = getTargetRows(root);
-
-  for (const [rowIndex, row] of rows.entries()) {
+  for (const [rowIndex, row] of getTargetRows(root).entries()) {
     if (extractOutcome(row)) continue;
 
     const control = findSaveControl(row);
     if (!control) continue;
 
-    const key = createSaveHandledKey(message, row, rowIndex);
+    const key = `${message.id}:${rowIndex}:${getTargetRowIdentifier(row, `row-${rowIndex}`)}:roll-save`;
     if (state.handledSaveApplications.has(key)) continue;
 
     return { key, control };
@@ -140,47 +131,32 @@ function findPendingSave(message, root) {
   return null;
 }
 
-function createSaveHandledKey(message, row, rowIndex) {
-  const targetUuid = getTargetRowIdentifier(row, `row-${rowIndex}`);
-  return `${message.id}:${rowIndex}:${targetUuid}:roll-save`;
-}
-
 function autoRollSpellDamage(messageId, attempt = 0) {
   if (!canUseTargetHelperAutomations() || state.handledSpellDamageRolls.has(messageId)) return;
 
-  const message = getBasicSaveMessage(messageId);
+  const message = game.messages.get(messageId);
+  if (message && resolveDamageMode(message) !== "basic-save") return;
   if (!message) return;
   if (hasRelatedDamageMessage(message)) {
     markSpellDamageHandled(message.id);
     return;
   }
 
-  const target = getSpellDamageTarget(messageId);
-  if (target.button) return clickSpellDamageButton(messageId, target.button, attempt);
-  if (target.canFallback) {
+  const root = getMessageRoot(messageId);
+  if (!(root instanceof HTMLElement)) {
     maybeFallbackToDirectSpellDamage(message);
     return retrySpellDamage(message.id, attempt);
   }
 
-  retrySpellDamage(messageId, attempt);
-}
-
-function getBasicSaveMessage(messageId) {
-  const message = game.messages.get(messageId);
-  return message && resolveDamageMode(message) === "basic-save" ? message : null;
-}
-
-function getSpellDamageTarget(messageId) {
-  const root = getMessageRoot(messageId);
-  if (!(root instanceof HTMLElement)) return { button: null, canFallback: true };
-
   const rows = getTargetRows(root);
-  if (rows.length === 0) return { button: null, canFallback: true };
+  if (rows.length === 0) {
+    maybeFallbackToDirectSpellDamage(message);
+    return retrySpellDamage(message.id, attempt);
+  }
 
-  return {
-    button: findReadySpellDamageButton(root, rows, messageId),
-    canFallback: false
-  };
+  const button = findReadySpellDamageButton(root, rows, messageId);
+  if (button) return clickSpellDamageButton(messageId, button, attempt);
+  retrySpellDamage(messageId, attempt);
 }
 
 function clickSpellDamageButton(messageId, button, attempt) {
@@ -205,10 +181,12 @@ function retrySpellDamage(messageId, attempt, delay = DELAYS.spellDamageRetry) {
 }
 
 function maybeFallbackToDirectSpellDamage(message) {
-  if (!message) return;
-  if (!state.pendingSpellDamageRolls.has(message.id)) return;
-  if (state.spellDamageFallbackAttempts.has(message.id)) return;
-  if (hasRelatedDamageMessage(message)) return;
+  if (
+    !message ||
+    !state.pendingSpellDamageRolls.has(message.id) ||
+    state.spellDamageFallbackAttempts.has(message.id) ||
+    hasRelatedDamageMessage(message)
+  ) return;
 
   const spell = getSpellLikeItem(message) ?? message.item;
   if (typeof spell?.rollDamage !== "function") return;

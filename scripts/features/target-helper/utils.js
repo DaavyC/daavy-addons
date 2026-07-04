@@ -2,7 +2,6 @@ import { DEGREE_OUTCOMES, DELAYS, LIMITS, SAVE_TYPES, SELECTORS } from "./config
 
 const ATTACK_CONTEXT_TYPES = new Set(["attack-roll", "spell-attack", "spell-attack-roll"]);
 const ITEM_IDENTITY_KEYS = ["uuid", "sourceId", "slug", "name"];
-const DEFAULT_ATTACK_LOOKUP_WINDOW = 10;
 
 export function asHTMLElement(value) {
   if (value instanceof HTMLElement) return value;
@@ -85,7 +84,7 @@ export function resolveDamageMode(message) {
     return "basic-save";
   }
 
-  if (hasMatchingAttackMessage(message)) {
+  if (findPreviousAttackMessage(game.messages.contents, message, { lookupWindow: LIMITS.attackLookupWindow }, (candidate) => candidate) !== null) {
     return "attack-roll";
   }
 
@@ -123,17 +122,17 @@ export function isRelatedDamageMessage(spellMessage, damageMessage) {
 }
 
 export function findAttackOutcome(message, targetUuid) {
-  return findPreviousAttackOutcome(game.messages.contents, message, {
-    lookupWindow: LIMITS.attackLookupWindow,
-    targetUuid
-  });
-}
-
-export function hasMatchingAttackMessage(message) {
-  return (
-    findPreviousMatchingAttackMessage(game.messages.contents, message, {
-      lookupWindow: LIMITS.attackLookupWindow
-    }) !== null
+  return findPreviousAttackMessage(
+    game.messages.contents,
+    message,
+    {
+      lookupWindow: LIMITS.attackLookupWindow,
+      targetUuid
+    },
+    (candidate) => {
+      const outcome = candidate.flags?.pf2e?.context?.outcome;
+      return DEGREE_OUTCOMES.includes(outcome) ? outcome : null;
+    }
   );
 }
 
@@ -166,12 +165,8 @@ function matchesActionButton(button, action) {
     return button.dataset.action?.endsWith("applyDamage") && button.dataset.multiplier === String(action.multiplier);
   }
 
-  const label = normalizeText(button.textContent);
+  const label = button.textContent?.trim().replace(/\s+/g, " ").toLowerCase() ?? "";
   return (button.dataset.action?.endsWith("applyDamage") && button.dataset.multiplier === "0") || label === "block";
-}
-
-function normalizeText(value) {
-  return value?.trim().replace(/\s+/g, " ").toLowerCase() ?? "";
 }
 
 function sameActor(leftMessage, rightMessage) {
@@ -186,25 +181,17 @@ function sameItem(leftItem, rightItem) {
   return ITEM_IDENTITY_KEYS.some((key) => hasSameIdentityValue(leftItem, rightItem, key));
 }
 
-function findPreviousMatchingAttackMessage(messages, damageMessage, options = {}) {
-  return findPreviousAttackMessage(messages, damageMessage, options, (candidate) => candidate);
-}
-
-function findPreviousAttackOutcome(messages, damageMessage, options = {}) {
-  return findPreviousAttackMessage(messages, damageMessage, options, (candidate) => {
-    const outcome = candidate.flags?.pf2e?.context?.outcome;
-    return DEGREE_OUTCOMES.includes(outcome) ? outcome : null;
-  });
-}
-
 function findPreviousAttackMessage(messages, damageMessage, options, getResult) {
-  const search = createPreviousMessageSearch(messages, damageMessage, options.lookupWindow);
-  if (!search) return null;
+  if (!Array.isArray(messages) || !damageMessage?.id) return null;
 
+  const currentIndex = messages.findIndex((candidate) => candidate?.id === damageMessage.id);
+  if (currentIndex < 1) return null;
+
+  const lowestIndex = Math.max(0, currentIndex - Math.max(0, options.lookupWindow));
   const targetUuid = options.targetUuid ?? null;
 
-  for (let index = search.currentIndex - 1; index >= search.lowestIndex; index -= 1) {
-    const candidate = search.messages[index];
+  for (let index = currentIndex - 1; index >= lowestIndex; index -= 1) {
+    const candidate = messages[index];
     if (!isMatchingAttackMessage(damageMessage, candidate, targetUuid)) continue;
 
     const result = getResult(candidate);
@@ -212,20 +199,6 @@ function findPreviousAttackMessage(messages, damageMessage, options, getResult) 
   }
 
   return null;
-}
-
-function createPreviousMessageSearch(messages, currentMessage, lookupWindow = DEFAULT_ATTACK_LOOKUP_WINDOW) {
-  if (!Array.isArray(messages) || !currentMessage?.id) return null;
-
-  const currentIndex = messages.findIndex((candidate) => candidate?.id === currentMessage.id);
-  if (currentIndex < 1) return null;
-
-  const windowSize = Number.isFinite(lookupWindow) ? Math.max(0, lookupWindow) : 0;
-  return {
-    messages,
-    currentIndex,
-    lowestIndex: Math.max(0, currentIndex - windowSize)
-  };
 }
 
 function isMatchingAttackMessage(damageMessage, candidate, targetUuid) {
