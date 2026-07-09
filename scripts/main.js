@@ -1,3 +1,3 @@
-import { registerTargetHelperAutomations } from "./features/target-helper-automations.js";
+import { registerTargetHelperHooks } from "./features/target-helper/hooks.js";
 
-registerTargetHelperAutomations();
+registerTargetHelperHooks();

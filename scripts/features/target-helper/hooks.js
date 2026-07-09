@@ -1,8 +1,9 @@
 import { DELAYS, SELECTORS } from "./config.js";
 import { autoApplyDamage, autoRollSaves, resolvePendingSpellDamage, scheduleSpellDamageCheck } from "./features.js";
 import { canUseTargetHelperAutomations, isToolbeltActive, registerTargetHelperAutomationsSetting } from "./settings.js";
-import { state } from "./state.js";
 import { asHTMLElement, getHTMLElements, resolveDamageMode } from "./utils.js";
+
+let hooksRegistered = false;
 
 export function registerTargetHelperHooks() {
   Hooks.once("init", registerTargetHelperAutomationsSetting);
@@ -10,9 +11,9 @@ export function registerTargetHelperHooks() {
 }
 
 function initializeTargetHelperAutomations() {
-  if (!isToolbeltActive() || state.hooksRegistered) return;
+  if (!isToolbeltActive() || hooksRegistered) return;
 
-  state.hooksRegistered = true;
+  hooksRegistered = true;
 
   Hooks.on("renderChatMessageHTML", handleRenderedChatMessage);
   Hooks.on("createChatMessage", handleCreatedChatMessage);

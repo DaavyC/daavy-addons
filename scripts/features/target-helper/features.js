@@ -1,6 +1,5 @@
 import { ACTIONS_BY_MODE, DELAYS, LIMITS, SELECTORS } from "./config.js";
 import { canUseTargetHelperAutomations } from "./settings.js";
-import { state } from "./state.js";
 import {
   extractOutcome,
   findActionButton,
@@ -21,6 +20,14 @@ import {
   repeatMessageAutomation,
   resolveDamageMode
 } from "./utils.js";
+
+const state = {
+  handledDamageApplications: new Set(),
+  handledSaveApplications: new Set(),
+  handledSpellDamageRolls: new Set(),
+  pendingSpellDamageRolls: new Map(),
+  spellDamageFallbackAttempts: new Set()
+};
 
 export async function autoApplyDamage(message, root) {
   if (!message?.isDamageRoll) return;
