@@ -1,0 +1,30 @@
+<div class="form-group stacked">
+  <span id="daavy-addons-feedback-category-label">{{localize "DAAVY_ADDONS.Feedback.Category"}}</span>
+  <div class="form-fields daavy-addons-feedback-categories" role="radiogroup" aria-labelledby="daavy-addons-feedback-category-label">
+    <label class="daavy-addons-feedback-category">
+      <input type="radio" name="category" value="Bug" required>
+      <span>{{localize "DAAVY_ADDONS.Feedback.Categories.Bug"}}</span>
+    </label>
+    <label class="daavy-addons-feedback-category">
+      <input type="radio" name="category" value="Suggestion" required>
+      <span>{{localize "DAAVY_ADDONS.Feedback.Categories.Suggestion"}}</span>
+    </label>
+  </div>
+</div>
+
+<div class="form-group stacked">
+  <label for="daavy-addons-feedback-message">{{localize "DAAVY_ADDONS.Feedback.Message"}}</label>
+  <textarea id="daavy-addons-feedback-message" name="message" rows="8" maxlength="3000" required></textarea>
+  <p class="hint">{{localize "DAAVY_ADDONS.Feedback.MessageHint"}}</p>
+</div>
+
+<footer class="form-footer">
+  <button type="button" class="daavy-addons-feedback-cancel" data-action="close">
+    <i class="fa-solid fa-xmark"></i>
+    {{localize "DAAVY_ADDONS.Feedback.Cancel"}}
+  </button>
+  <button type="submit" class="daavy-addons-feedback-send">
+    <i class="fa-solid fa-paper-plane"></i>
+    {{localize "DAAVY_ADDONS.Feedback.Send"}}
+  </button>
+</footer>

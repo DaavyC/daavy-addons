@@ -1,10 +1,100 @@
 {
   "DAAVY_ADDONS": {
     "Settings": {
+      "Groups": {
+        "Features": "Features",
+        "ReachControl": "Reach Control"
+      },
+      "Sections": {
+        "Doors": "Doors",
+        "Stairways": "Stairways",
+        "Tokens": "Tokens"
+      },
       "TargetHelperAutomations": {
         "Name": "Target Helper Automations",
-        "Hint": "Automatically rolls saves and applies damage for supported PF2e Toolbelt Target Helper actions."
+        "Hint": "Automatically rolls saves and applies damage through PF2e Toolbelt's Target Helper.",
+        "UnavailableHint": "Requires a Pathfinder 2e world with PF2e Toolbelt active."
+      },
+      "ReachControl": {
+        "Name": "Reach Control",
+        "Hint": "Limit supported placeable interactions by token distance.",
+        "Doors": {
+          "Enabled": {
+            "Name": "Enabled",
+            "Hint": "Limit door interactions by range."
+          },
+          "Range": {
+            "Name": "Maximum Range",
+            "Hint": "Maximum door interaction range in grid squares."
+          },
+          "AffectGM": {
+            "Name": "Affect GMs?",
+            "Hint": "Apply the door range limit when a GM controls one token."
+          }
+        },
+        "Stairways": {
+          "Enabled": {
+            "Name": "Enabled",
+            "Hint": "Limit Stairways teleports by range when Stairways is active."
+          },
+          "Range": {
+            "Name": "Maximum Range",
+            "Hint": "Maximum Stairways interaction range in grid squares."
+          },
+          "AffectGM": {
+            "Name": "Affect GMs?",
+            "Hint": "Apply the Stairways range limit when a GM controls one token."
+          }
+        },
+        "Tokens": {
+          "Enabled": {
+            "Name": "Enabled",
+            "Hint": "Limit opening another token's actor sheet by range."
+          },
+          "Range": {
+            "Name": "Maximum Range",
+            "Hint": "Maximum token interaction range in grid squares."
+          }
+        }
       }
+    },
+    "ReachControl": {
+      "Placeables": {
+        "Door": "door",
+        "Stairway": "stairway",
+        "Token": "token"
+      },
+      "Warnings": {
+        "MultipleTokens": "Please select a single token.",
+        "NoToken": "No character is selected to interact with this {placeable}.",
+        "OutOfReach": "This {placeable} is outside {tokenName}'s reach or unavailable."
+      },
+      "PerObjectRange": {
+        "Label": "Reach Control Range",
+        "Hint": "Use a positive grid-square range for this object. Use 0 for the matching module setting."
+      }
+    },
+    "Feedback": {
+      "MenuLabel": "Send Feedback",
+      "MenuHint": "Send anonymous feedback about Daavy's Addons.",
+      "Category": "Category",
+      "Categories": {
+        "Bug": "Bug",
+        "Suggestion": "Suggestion"
+      },
+      "Message": "Message",
+      "MessageHint": "Describe your feedback without including personal or private information.",
+      "Cancel": "Cancel",
+      "Send": "Send Feedback",
+      "Invalid": "Choose a category and enter a message of up to 3,000 characters.",
+      "Success": "Feedback sent. Thank you!",
+      "Error": "Unable to send feedback. Please try again later."
+    },
+    "Donate": {
+      "Label": "Donate"
+    },
+    "Discord": {
+      "Label": "Discord"
     }
   }
 }

@@ -1,14 +1,34 @@
 export const MODULE_ID = "daavy-addons";
-export const TARGET_HELPER_AUTOMATIONS_SETTING = "targetHelperAutomations";
+
+export const SETTINGS = {
+  TARGET_HELPER_AUTOMATIONS: "targetHelperAutomations",
+  REACH_CONTROL: "reachControl",
+  REACH_DOORS: "reachControlDoors",
+  REACH_DOOR_RANGE: "reachControlDoorRange",
+  REACH_DOORS_AFFECT_GM: "reachControlDoorsAffectGM",
+  REACH_STAIRWAYS: "reachControlStairways",
+  REACH_STAIRWAY_RANGE: "reachControlStairwayRange",
+  REACH_STAIRWAYS_AFFECT_GM: "reachControlStairwaysAffectGM",
+  REACH_TOKENS: "reachControlTokens",
+  REACH_TOKEN_RANGE: "reachControlTokenRange"
+};
+
+export const REACH_CONTROL_RANGE_FLAG = "reachControlRange";
+
+export const REACH_RANGE = {
+  min: 0,
+  max: 20,
+  step: 1
+};
 
 export const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 
-export const DEGREE_OUTCOMES = Object.freeze([
+export const DEGREE_OUTCOMES = [
   "criticalFailure",
   "failure",
   "success",
   "criticalSuccess"
-]);
+];
 
 export const SELECTORS = {
   renderedMessage: "[data-message-id]",

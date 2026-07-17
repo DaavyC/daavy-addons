@@ -1,0 +1,84 @@
+button.daavy-addons-feedback-send {
+  background: #236c35;
+  border-color: #45a85b;
+  color: #f4fff5;
+}
+
+.daavy-addons-feedback-send:hover {
+  background: #2f8846;
+}
+
+.daavy-addons-feedback-cancel {
+  background: #7f2424;
+  border-color: #c64b4b;
+  color: #fff6f6;
+}
+
+.daavy-addons-feedback-cancel:hover {
+  background: #9b3030;
+}
+
+button.daavy-addons-feedback-send:focus,
+button.daavy-addons-feedback-send:active,
+button.daavy-addons-feedback-cancel:focus,
+button.daavy-addons-feedback-cancel:active {
+  box-shadow: none;
+  outline: none;
+}
+
+button.daavy-addons-feedback-send:focus-visible,
+button.daavy-addons-feedback-cancel:focus-visible {
+  box-shadow: none;
+  outline: 2px solid #4a90e2;
+  outline-offset: 2px;
+}
+
+.daavy-addons-feedback-categories {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.daavy-addons-feedback-category {
+  margin: 0;
+  position: relative;
+}
+
+.daavy-addons-feedback-category input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.daavy-addons-feedback-category span {
+  align-items: center;
+  background: #3f5f78;
+  border: 1px solid #6f8ba0;
+  border-radius: 4px;
+  color: #f3f6fa;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  min-height: 36px;
+  opacity: 0.65;
+}
+
+.daavy-addons-feedback-category:hover span {
+  background: #4b6f8a;
+}
+
+.daavy-addons-feedback-category:hover span,
+.daavy-addons-feedback-category input:checked + span {
+  opacity: 1;
+}
+
+.daavy-addons-feedback-category input:checked + span {
+  background: #5f86a3;
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.daavy-addons-feedback-category input:focus-visible + span {
+  outline: 2px solid var(--color-text-primary, #ffffff);
+  outline-offset: 2px;
+}

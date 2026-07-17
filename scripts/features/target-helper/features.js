@@ -1,4 +1,4 @@
-import { ACTIONS_BY_MODE, DELAYS, LIMITS, SELECTORS } from "./config.js";
+import { ACTIONS_BY_MODE, DELAYS, LIMITS, SELECTORS } from "../../constants.js";
 import { canUseTargetHelperAutomations } from "./settings.js";
 import {
   extractOutcome,
@@ -6,9 +6,7 @@ import {
   findAttackOutcome,
   findFirstDamageApplication,
   findSaveControl,
-  findSpellDamageButton,
   getDamageApplicationTargetUuid,
-  getDamageRows,
   getHTMLElements,
   getMessageRoot,
   getSpellLikeItem,
@@ -68,7 +66,7 @@ export function resolvePendingSpellDamage(damageMessage) {
 }
 
 function applyNextDamage(message, root, mode) {
-  for (const row of getDamageRows(root)) {
+  for (const row of getHTMLElements(root, SELECTORS.damageRows)) {
     const application = findNextDamageApplication(message, row, mode);
     if (!application) continue;
 
@@ -142,8 +140,7 @@ function autoRollSpellDamage(messageId, attempt = 0) {
   if (!canUseTargetHelperAutomations() || state.handledSpellDamageRolls.has(messageId)) return;
 
   const message = game.messages.get(messageId);
-  if (message && resolveDamageMode(message) !== "basic-save") return;
-  if (!message) return;
+  if (!message || resolveDamageMode(message) !== "basic-save") return;
   if (hasRelatedDamageMessage(message)) {
     markSpellDamageHandled(message.id);
     return;
@@ -175,7 +172,8 @@ function clickSpellDamageButton(messageId, button, attempt) {
 function findReadySpellDamageButton(root, targetRows, messageId) {
   if (targetRows.some(findSaveControl)) return null;
 
-  const button = findSpellDamageButton(root);
+  const candidate = root.querySelector(SELECTORS.spellDamageAction);
+  const button = candidate instanceof HTMLButtonElement ? candidate : null;
   const lastAttempt = state.pendingSpellDamageRolls.get(messageId) ?? 0;
   if (!button || button.disabled || Date.now() - lastAttempt < DELAYS.spellDamageThrottle) return null;
 

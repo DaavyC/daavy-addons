@@ -1,61 +1,37 @@
-import { DEGREE_OUTCOMES, DELAYS, LIMITS, SAVE_TYPES, SELECTORS } from "./config.js";
+import { DEGREE_OUTCOMES, DELAYS, LIMITS, SAVE_TYPES, SELECTORS } from "../../constants.js";
 
 const ATTACK_CONTEXT_TYPES = new Set(["attack-roll", "spell-attack", "spell-attack-roll"]);
 const ITEM_IDENTITY_KEYS = ["uuid", "sourceId", "slug", "name"];
 
-export function asHTMLElement(value) {
-  if (value instanceof HTMLElement) return value;
-  if (value?.[0] instanceof HTMLElement) return value[0];
-  return null;
-}
-
 export function getHTMLElements(root, selector) {
-  return Array.from(root.querySelectorAll(selector)).filter(isHTMLElement);
+  return [...root.querySelectorAll(selector)].filter((element) => element instanceof HTMLElement);
 }
 
 export function getMessageRoot(messageId) {
-  return asHTMLElement(document.querySelector(messageRootSelector(messageId)));
+  return document.querySelector(messageRootSelector(messageId));
 }
 
 export function getTargetRows(root) {
   return getHTMLElements(root, SELECTORS.targetRows);
 }
 
-export function getDamageRows(root) {
-  return getHTMLElements(root, SELECTORS.damageRows);
-}
-
-export function hasTargetSaveControls(messageId) {
-  return document.querySelector(`${messageRootSelector(messageId)} ${SELECTORS.targetRows} ${SELECTORS.saveAction}`) !== null;
-}
-
 export function findSaveControl(row) {
-  return asHTMLElement(row.querySelector(SELECTORS.saveAction));
+  return row.querySelector(SELECTORS.saveAction);
 }
 
 export function extractOutcome(row) {
   const degree = row.querySelector(".degree");
   const classes = degree?.classList ?? row.querySelector(".damage-application")?.classList ?? row.classList;
-  if (!classes) return null;
-
   return DEGREE_OUTCOMES.find((outcome) => classes.contains(outcome)) ?? null;
 }
 
-export function findSpellDamageButton(root) {
-  const button = root.querySelector(SELECTORS.spellDamageAction);
-  return button instanceof HTMLButtonElement ? button : null;
-}
-
 export function findActionButton(application, action) {
-  return (
-    getHTMLElements(application, SELECTORS.actionButton).find((button) =>
-      button instanceof HTMLButtonElement && matchesActionButton(button, action)
-    ) ?? null
-  );
+  return getHTMLElements(application, SELECTORS.actionButton)
+    .find((button) => matchesActionButton(button, action)) ?? null;
 }
 
 export function findFirstDamageApplication(root) {
-  return asHTMLElement(root.querySelector(SELECTORS.damageApplication));
+  return root.querySelector(SELECTORS.damageApplication);
 }
 
 export function getDamageApplicationTargetUuid(application) {
@@ -73,7 +49,7 @@ export function getTargetRowIdentifier(row, fallback) {
 
 export function isSpellSaveMessage(message) {
   if (!getSpellLikeItem(message)) return false;
-  return hasTargetSaveControls(message.id) || SAVE_TYPES.has(getSpellSaveType(message) ?? "");
+  return document.querySelector(`${messageRootSelector(message.id)} ${SELECTORS.targetRows} ${SELECTORS.saveAction}`) !== null || SAVE_TYPES.has(getSpellSaveType(message) ?? "");
 }
 
 export function resolveDamageMode(message) {
@@ -91,7 +67,7 @@ export function resolveDamageMode(message) {
   return null;
 }
 
-export function getSpellSaveType(message) {
+function getSpellSaveType(message) {
   const spell = getSpellLikeItem(message);
   const save = spell?.system?.defense?.save;
   return save?.statistic ?? spell?.system?.save?.value ?? null;
@@ -153,11 +129,7 @@ export async function repeatMessageAutomation(message, root, passLimit, runPass)
 }
 
 function messageRootSelector(value) {
-  const stringValue = String(value);
-  const escaped = globalThis.CSS?.escape
-    ? globalThis.CSS.escape(stringValue)
-    : stringValue.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  return `[data-message-id="${escaped}"]`;
+  return `[data-message-id="${CSS.escape(String(value))}"]`;
 }
 
 function matchesActionButton(button, action) {
@@ -219,8 +191,4 @@ function getMessageActorUuid(message) {
 function hasSameIdentityValue(leftItem, rightItem, key) {
   const leftValue = leftItem?.[key];
   return leftValue !== null && leftValue !== undefined && leftValue !== "" && leftValue === rightItem?.[key];
-}
-
-function isHTMLElement(value) {
-  return value instanceof HTMLElement;
 }

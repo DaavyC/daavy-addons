@@ -1,0 +1,102 @@
+.daavy-addons-settings-group {
+  border: 1px solid var(--color-border-light-primary, #a1a1a1);
+  border-radius: 5px;
+  display: block;
+  margin: 2px 0;
+  padding: 0;
+}
+
+.daavy-addons-settings-group[hidden],
+.daavy-addons-settings-row[hidden] {
+  display: none;
+}
+
+.daavy-addons-settings-group-title {
+  background: var(--color-bg-option, rgba(127, 127, 127, 0.12));
+  border-bottom: 1px solid var(--color-border-light-primary, #a1a1a1);
+  border-radius: 4px 4px 0 0;
+  color: var(--color-text-primary, inherit);
+  font-size: var(--font-size-14, 14px);
+  font-weight: bold;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.daavy-addons-settings-section + .daavy-addons-settings-section {
+  border-top: 1px solid var(--color-border-light-primary, #a1a1a1);
+}
+
+.daavy-addons-settings-section-title {
+  background: rgba(127, 127, 127, 0.08);
+  font-size: var(--font-size-13, 13px);
+  margin: 0;
+  padding: 6px 10px;
+}
+
+.daavy-addons-settings-row {
+  border: none;
+  margin: 0;
+  padding: 10px;
+}
+
+.daavy-addons-settings-row + .daavy-addons-settings-row {
+  border-top: 1px solid var(--color-border-light-tertiary, rgba(127, 127, 127, 0.2));
+}
+
+.daavy-addons-target-helper-warning {
+  color: var(--color-level-error, #ff4d4f);
+  display: block;
+  margin-top: 4px;
+}
+
+.daavy-addons-settings-actions {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+
+.daavy-addons-settings-actions button {
+  flex: 1;
+}
+
+button.daavy-addons-donate-action {
+  background: #ff5a16;
+  border-color: #ff8a5c;
+  color: #ffffff;
+}
+
+button.daavy-addons-donate-action:hover {
+  background: #e84e0c;
+}
+
+button.daavy-addons-discord-action {
+  background: #5662f6;
+  border-color: #7e87ff;
+  color: #ffffff;
+}
+
+button.daavy-addons-discord-action:hover {
+  background: #4652dc;
+}
+
+button.daavy-addons-feedback-action {
+  background: #238b82;
+  border-color: #45bdb1;
+  color: #ffffff;
+}
+
+button.daavy-addons-feedback-action:hover {
+  background: #2ca69b;
+}
+
+.daavy-addons-settings-actions button:focus,
+.daavy-addons-settings-actions button:active {
+  box-shadow: none;
+  outline: none;
+}
+
+.daavy-addons-settings-actions button:focus-visible {
+  box-shadow: none;
+  outline: 2px solid #4a90e2;
+  outline-offset: 2px;
+}

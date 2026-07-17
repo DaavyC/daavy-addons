@@ -1,6 +1,6 @@
 # 🎯 Daavy's Addons
 
-A collection of extra **Foundry VTT** features, from standalone tools to community integrations.
+This module includes standalone features and integrations that do not require dedicated modules.
 
 ---
 
@@ -10,29 +10,24 @@ A collection of extra **Foundry VTT** features, from standalone tools to communi
 
 ## 🗂️ Features
 
-- **🎯 Target Helper Automations** — Rolls saves, rolls damage, and applies damage automatically for supported Target Helper chat cards.
-
----
-
-## 🔧 Setup
-
-- Enable **Target Helper** in the **PF2e Toolbelt** module.
-- I recommend enabling **automatic rolls** in the **PF2e Workbench** module.
+- **🎯 Target Helper Automations (PF2e)** — Rolls saves, rolls damage, and applies damage automatically for supported Target Helper chat cards.
+- **🖐️ Reach Control** — Limits door, Stairways, and token interactions by distance in grid squares.
 
 ---
 
 ## ⚙️ Settings
 
 - **Target Helper Automations** — Enables or disables this automation feature.
+- **Reach Control** — Enables range limits and per-placeable integrations.
 
 ---
 
 ## 🛠️ Compatibility
 
 - **Foundry VTT**: Version 14
-- **System**: PF2e
+- **Systems**: System-agnostic for Reach Control; PF2e for Target Helper Automations
+- **Optional modules**: PF2e Toolbelt, PF2e Workbench, and Stairways
 
 ---
 
 > This module was built with AI-assisted development.
-> When I add something that is not PF2e-focused, I'll remove the system as a dependency.

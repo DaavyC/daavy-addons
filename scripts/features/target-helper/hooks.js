@@ -1,19 +1,23 @@
-import { DELAYS, SELECTORS } from "./config.js";
+import { DELAYS, MODULE_ID, SELECTORS, SETTINGS } from "../../constants.js";
+import { asHTMLElement } from "../../dom.js";
 import { autoApplyDamage, autoRollSaves, resolvePendingSpellDamage, scheduleSpellDamageCheck } from "./features.js";
-import { canUseTargetHelperAutomations, isToolbeltActive, registerTargetHelperAutomationsSetting } from "./settings.js";
-import { asHTMLElement, getHTMLElements, resolveDamageMode } from "./utils.js";
-
-let hooksRegistered = false;
+import { canUseTargetHelperAutomations, isTargetHelperAutomationsAvailable } from "./settings.js";
+import { getHTMLElements, resolveDamageMode } from "./utils.js";
 
 export function registerTargetHelperHooks() {
-  Hooks.once("init", registerTargetHelperAutomationsSetting);
   Hooks.once("ready", initializeTargetHelperAutomations);
 }
 
 function initializeTargetHelperAutomations() {
-  if (!isToolbeltActive() || hooksRegistered) return;
-
-  hooksRegistered = true;
+  if (!isTargetHelperAutomationsAvailable()) {
+    if (
+      game.user === game.users.activeGM &&
+      game.settings.get(MODULE_ID, SETTINGS.TARGET_HELPER_AUTOMATIONS) === true
+    ) {
+      void game.settings.set(MODULE_ID, SETTINGS.TARGET_HELPER_AUTOMATIONS, false);
+    }
+    return;
+  }
 
   Hooks.on("renderChatMessageHTML", handleRenderedChatMessage);
   Hooks.on("createChatMessage", handleCreatedChatMessage);

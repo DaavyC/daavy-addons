@@ -1,8 +1,8 @@
 {
   "id": "daavy-addons",
   "title": "Daavy's Addons",
-  "description": "<p>A collection of extra Foundry VTT features, from standalone tools to community integrations.</p>",
-  "version": "1.0.3",
+  "description": "<p>This module includes standalone features and integrations that do not require dedicated modules.</p>",
+  "version": "1.1.0",
   "authors": [
     {
       "name": "Daavy",
@@ -20,19 +20,11 @@
     "maximum": "14"
   },
   "relationships": {
-    "systems": [
-      {
-        "id": "pf2e",
-        "type": "system"
-      }
-    ],
     "recommends": [
       {
         "id": "xdy-pf2e-workbench",
         "type": "module"
-      }
-    ],
-    "requires": [
+      },
       {
         "id": "pf2e-toolbelt",
         "type": "module"
@@ -41,6 +33,10 @@
   },
   "esmodules": [
     "scripts/main.js"
+  ],
+  "styles": [
+    "styles/main.css",
+    "styles/feedback.css"
   ],
   "languages": [
     {
