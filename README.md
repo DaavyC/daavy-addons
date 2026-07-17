@@ -30,4 +30,10 @@ This module includes standalone features and integrations that do not require de
 
 ---
 
+## 📚 Credits
+
+- **[Arms Reach](https://github.com/p4535992/foundryvtt-arms-reach)** by p4535992
+
+---
+
 > This module was built with AI-assisted development.
