@@ -147,12 +147,7 @@ function autoRollSpellDamage(messageId, attempt = 0) {
   }
 
   const root = getMessageRoot(messageId);
-  if (!(root instanceof HTMLElement)) {
-    maybeFallbackToDirectSpellDamage(message);
-    return retrySpellDamage(message.id, attempt);
-  }
-
-  const rows = getTargetRows(root);
+  const rows = root instanceof HTMLElement ? getTargetRows(root) : [];
   if (rows.length === 0) {
     maybeFallbackToDirectSpellDamage(message);
     return retrySpellDamage(message.id, attempt);

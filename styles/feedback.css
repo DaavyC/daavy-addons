@@ -18,16 +18,12 @@ button.daavy-addons-feedback-send {
   background: #9b3030;
 }
 
-button.daavy-addons-feedback-send:focus,
-button.daavy-addons-feedback-send:active,
-button.daavy-addons-feedback-cancel:focus,
-button.daavy-addons-feedback-cancel:active {
+button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):is(:focus, :active) {
   box-shadow: none;
   outline: none;
 }
 
-button.daavy-addons-feedback-send:focus-visible,
-button.daavy-addons-feedback-cancel:focus-visible {
+button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):focus-visible {
   box-shadow: none;
   outline: 2px solid #4a90e2;
   outline-offset: 2px;

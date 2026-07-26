@@ -19,8 +19,13 @@ function initializeTargetHelperAutomations() {
     return;
   }
 
-  Hooks.on("renderChatMessageHTML", handleRenderedChatMessage);
-  Hooks.on("createChatMessage", handleCreatedChatMessage);
+  Hooks.on("renderChatMessageHTML", (message, html) => {
+    const root = asHTMLElement(html);
+    if (root) queueMessageAutomation(message, root);
+  });
+  Hooks.on("createChatMessage", (message) => {
+    if (message?.isDamageRoll) resolvePendingSpellDamage(message);
+  });
   for (const hookName of ["pf2e-toolbelt.rollSave", "pf2e-toolbelt.rerollSave"]) {
     Hooks.on(hookName, ({ message }) => {
       if (message) scheduleSpellDamageCheck(message.id, DELAYS.saveHook);
@@ -28,15 +33,6 @@ function initializeTargetHelperAutomations() {
   }
 
   DELAYS.existingMessages.forEach((delay) => window.setTimeout(processExistingChatMessages, delay));
-}
-
-function handleRenderedChatMessage(message, html) {
-  const root = asHTMLElement(html);
-  if (root) queueMessageAutomation(message, root);
-}
-
-function handleCreatedChatMessage(message) {
-  if (message?.isDamageRoll) resolvePendingSpellDamage(message);
 }
 
 function processExistingChatMessages() {
