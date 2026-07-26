@@ -1,5 +1,5 @@
 import { ACTIONS_BY_MODE, DELAYS, LIMITS, SELECTORS } from "../../constants.js";
-import { canUseTargetHelperAutomations } from "./settings.js";
+import { canUseTargetHelperAutomations, shouldAutomateTarget } from "./settings.js";
 import {
   extractOutcome,
   findActionButton,
@@ -67,6 +67,8 @@ export function resolvePendingSpellDamage(damageMessage) {
 
 function applyNextDamage(message, root, mode) {
   for (const row of getHTMLElements(root, SELECTORS.damageRows)) {
+    if (!shouldAutomateTarget(row)) continue;
+
     const application = findNextDamageApplication(message, row, mode);
     if (!application) continue;
 
@@ -122,6 +124,7 @@ function clickPendingSave(message, root) {
 
 function findPendingSave(message, root) {
   for (const [rowIndex, row] of getTargetRows(root).entries()) {
+    if (!shouldAutomateTarget(row)) continue;
     if (extractOutcome(row)) continue;
 
     const control = findSaveControl(row);

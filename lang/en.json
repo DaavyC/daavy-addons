@@ -3,6 +3,7 @@
     "Settings": {
       "Groups": {
         "Features": "Features",
+        "TargetHelperAutomations": "Target Helper Automations",
         "ReachControl": "Reach Control"
       },
       "Sections": {
@@ -13,7 +14,11 @@
       "TargetHelperAutomations": {
         "Name": "Target Helper Automations",
         "Hint": "Automatically rolls saves and applies damage through PF2e Toolbelt's Target Helper.",
-        "UnavailableHint": "Requires a Pathfinder 2e world with PF2e Toolbelt active."
+        "UnavailableHint": "Requires a Pathfinder 2e world with PF2e Toolbelt active.",
+        "NpcsOnly": {
+          "Name": "NPCs Only",
+          "Hint": "Automatically roll saves and apply damage only for NPC targets."
+        }
       },
       "ReachControl": {
         "Name": "Reach Control",

@@ -8,6 +8,7 @@ import { isTargetHelperAutomationsAvailable } from "./features/target-helper/set
 
 const SETTING_DEFINITIONS = {
   [SETTINGS.TARGET_HELPER_AUTOMATIONS]: { label: "TargetHelperAutomations", defaultValue: false },
+  [SETTINGS.TARGET_HELPER_NPCS_ONLY]: { label: "TargetHelperAutomations.NpcsOnly", defaultValue: false },
   [SETTINGS.REACH_CONTROL]: { label: "ReachControl", defaultValue: false },
   [SETTINGS.REACH_DOORS]: { label: "ReachControl.Doors.Enabled", defaultValue: true },
   [SETTINGS.REACH_DOOR_RANGE]: { label: "ReachControl.Doors.Range", defaultValue: 1 },
@@ -73,6 +74,14 @@ export function organizeSettingsConfig(html) {
   featureRows[0].replaceWith(featuresGroup);
   appendRows(featuresGroup, featureRows);
   configureTargetHelperAvailability(container);
+
+  const targetHelperRow = findSettingRow(container, SETTINGS.TARGET_HELPER_NPCS_ONLY);
+  if (targetHelperRow) {
+    const targetHelperGroup = createGroup(documentRef, "TargetHelperAutomations");
+    targetHelperRow.replaceWith(targetHelperGroup);
+    appendRows(targetHelperGroup, [targetHelperRow]);
+    configureVisibility(container, SETTINGS.TARGET_HELPER_AUTOMATIONS, [targetHelperGroup]);
+  }
 
   const sectionRows = Object.fromEntries(
     Object.entries(REACH_SECTIONS).map(([section, keys]) => [

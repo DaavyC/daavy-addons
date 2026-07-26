@@ -1,3 +1,7 @@
+##### 1.1.1
+- Added an "NPCs Only" setting for Target Helper Automations
+  - When "NPCs Only" is enabled, the automation only affects NPCs
+
 ##### 1.1.0
 - Added Reach Control, allowing interaction distance limits for Doors, Stairways, and Tokens
 - With Reach Control, the module is no longer limited to PF2e

@@ -2,6 +2,7 @@ export const MODULE_ID = "daavy-addons";
 
 export const SETTINGS = {
   TARGET_HELPER_AUTOMATIONS: "targetHelperAutomations",
+  TARGET_HELPER_NPCS_ONLY: "targetHelperNpcsOnly",
   REACH_CONTROL: "reachControl",
   REACH_DOORS: "reachControlDoors",
   REACH_DOOR_RANGE: "reachControlDoorRange",
@@ -37,6 +38,7 @@ export const SELECTORS = {
   saveAction: '[data-action="roll-save"]',
   spellDamageAction: '.card-buttons [data-action="spell-damage"]',
   damageApplication: ".damage-application[data-target-uuid]",
+  npcTargetIcon: ".target-header .name > i.fa-ghost",
   actionButton: "button[data-action]"
 };
 
