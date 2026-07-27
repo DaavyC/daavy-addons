@@ -1,6 +1,7 @@
 import {
   MODULE_ID,
   REACH_RANGE,
+  REACH_TYPES,
   SETTINGS
 } from "./constants.js";
 import { getSetting } from "./utils.js";
@@ -23,23 +24,6 @@ const SETTING_DEFINITIONS = {
   [SETTINGS.REACH_STAIRWAYS_AFFECT_GM]: { label: "ReachControl.Stairways.AffectGM", defaultValue: false },
   [SETTINGS.REACH_TOKENS]: { label: "ReachControl.Tokens.Enabled", defaultValue: true },
   [SETTINGS.REACH_TOKEN_RANGE]: { label: "ReachControl.Tokens.Range", defaultValue: 1 }
-};
-
-const REACH_SECTIONS = {
-  Doors: [
-    SETTINGS.REACH_DOORS,
-    SETTINGS.REACH_DOOR_RANGE,
-    SETTINGS.REACH_DOORS_AFFECT_GM
-  ],
-  Stairways: [
-    SETTINGS.REACH_STAIRWAYS,
-    SETTINGS.REACH_STAIRWAY_RANGE,
-    SETTINGS.REACH_STAIRWAYS_AFFECT_GM
-  ],
-  Tokens: [
-    SETTINGS.REACH_TOKENS,
-    SETTINGS.REACH_TOKEN_RANGE
-  ]
 };
 
 export function registerSettings() {
@@ -79,9 +63,12 @@ export function organizeSettingsConfig(html) {
   }
 
   const sectionRows = Object.fromEntries(
-    Object.entries(REACH_SECTIONS).map(([section, keys]) => [
-      section,
-      keys.map((key) => findSettingRow(html, key)).filter(Boolean)
+    Object.entries(REACH_TYPES).map(([type, config]) => [
+      type[0].toUpperCase() + type.slice(1),
+      [config.enabledSetting, config.rangeSetting, config.gmSetting]
+        .filter(Boolean)
+        .map((key) => findSettingRow(html, key))
+        .filter(Boolean)
     ])
   );
   const firstReachRow = Object.values(sectionRows).flat()[0];
@@ -103,17 +90,11 @@ export function organizeSettingsConfig(html) {
   }
 
   configureVisibility(html, SETTINGS.REACH_CONTROL, [reachGroup]);
-  configureVisibility(html, SETTINGS.REACH_DOORS, [
-    findSettingRow(html, SETTINGS.REACH_DOOR_RANGE),
-    findSettingRow(html, SETTINGS.REACH_DOORS_AFFECT_GM)
-  ]);
-  configureVisibility(html, SETTINGS.REACH_STAIRWAYS, [
-    findSettingRow(html, SETTINGS.REACH_STAIRWAY_RANGE),
-    findSettingRow(html, SETTINGS.REACH_STAIRWAYS_AFFECT_GM)
-  ]);
-  configureVisibility(html, SETTINGS.REACH_TOKENS, [
-    findSettingRow(html, SETTINGS.REACH_TOKEN_RANGE)
-  ]);
+  for (const config of Object.values(REACH_TYPES)) {
+    configureVisibility(html, config.enabledSetting, [config.rangeSetting, config.gmSetting]
+      .filter(Boolean)
+      .map((key) => findSettingRow(html, key)));
+  }
 }
 
 function createGroup(documentRef, groupKey) {

@@ -24,7 +24,6 @@ button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):is(:focus,
 }
 
 button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):focus-visible {
-  box-shadow: none;
   outline: 2px solid #4a90e2;
   outline-offset: 2px;
 }

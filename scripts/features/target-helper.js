@@ -194,8 +194,18 @@ async function automateSource(message, data) {
   if (type === "basic-save") {
     await updateAutomationState(message, { status: "rolling-saves" }, false);
     const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-    const pendingTargets = targets.filter((target) => !resolveSaveResultMessage(message, target, current));
-    const item = await resolveUuid(current.save.itemUuid) ?? getSpellLikeItem(message) ?? message.item;
+    const existingResults = indexSaveResultMessages(message, targets, current);
+    const pendingTargets = targets.filter((target) => !existingResults.has(target.uuid));
+    const [resolvedItem, resolvedOrigin] = pendingTargets.length
+      ? await Promise.all([
+        resolveUuid(current.save.itemUuid),
+        resolveUuid(current.save.originUuid)
+      ])
+      : [null, null];
+    const item = pendingTargets.length
+      ? resolvedItem ?? getSpellLikeItem(message) ?? message.item
+      : null;
+    const origin = pendingTargets.length ? resolvedOrigin ?? message.actor : null;
     const sharedConsumable = (
       item?.isOfType("weapon")
       && item.traits.has("consumable")
@@ -211,7 +221,12 @@ async function automateSource(message, data) {
       for (const target of group) {
         results.push({
           targetUuid: target.uuid,
-          resultMessage: await rollSave(message, target, current.save, null, true, true)
+          resultMessage: await rollSave(message, target, current.save, null, {
+            automated: true,
+            deferStorage: true,
+            item,
+            origin
+          })
         });
       }
       return results;
@@ -438,13 +453,14 @@ function renderTargetCard(message, root, data, damage) {
     ));
   if (!targets.length) return;
 
+  const saveResultMessages = damage ? null : indexSaveResultMessages(message, targets, data);
   const card = document.createElement("section");
   card.className = "daavy-addons-target-helper";
   card.append(document.createElement("hr"));
   for (const target of targets) {
     card.append(damage
       ? createDamageRow(message, target, data)
-      : createSaveRow(message, target, data));
+      : createSaveRow(message, target, data, saveResultMessages.get(target.uuid) ?? null));
   }
   content.append(card);
 }
@@ -463,15 +479,10 @@ function createDamageRow(message, token, data) {
 
   actions.className = "daavy-addons-target-helper-actions";
   for (const action of TARGET_HELPER_DAMAGE_ACTIONS) {
-    const button = document.createElement("button");
     const label = game.i18n.localize(`DAAVY_ADDONS.TargetHelper.Actions.${action.key}`);
+    const button = createIconButton(`daavy-addons-target-helper-action ${action.key.toLowerCase()}`, action.icon, label);
 
-    button.type = "button";
-    button.className = `daavy-addons-target-helper-action ${action.key.toLowerCase()}`;
     button.classList.toggle("recommended", action.multiplier === recommendedMultiplier);
-    button.innerHTML = action.icon;
-    button.title = label;
-    button.setAttribute("aria-label", label);
     button.disabled = !canApply;
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
@@ -572,7 +583,7 @@ function getRecommendedDamageMultiplier(message, token, data) {
 function createDamageResult(message, token, result) {
   const container = document.createElement("div");
   const amount = document.createElement("span");
-  const button = document.createElement("button");
+  const button = createIconButton("daavy-addons-target-helper-undo", '<i class="fa-solid fa-rotate-left fa-fw" inert></i>', game.i18n.localize("DAAVY_ADDONS.TargetHelper.UndoDamage"));
   const visible = canViewDamageResult(result);
   const canUndo = visible && (game.user.isGM || token.isOwner);
 
@@ -582,11 +593,6 @@ function createDamageResult(message, token, result) {
     ? result.amount
     : game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
 
-  button.type = "button";
-  button.className = "daavy-addons-target-helper-undo";
-  button.innerHTML = '<i class="fa-solid fa-rotate-left fa-fw" inert></i>';
-  button.title = game.i18n.localize("DAAVY_ADDONS.TargetHelper.UndoDamage");
-  button.setAttribute("aria-label", button.title);
   button.disabled = !canUndo;
   bindPendingButton(button, () => undoDamage(message, token), !canUndo);
 
@@ -642,23 +648,17 @@ function isValidIwrApplications(applications) {
   );
 }
 
-function createSaveRow(message, token, data) {
+function createSaveRow(message, token, data, resultMessage) {
   const row = createTargetRow(token);
   const result = data.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
-  const resultMessage = resolveSaveResultMessage(message, token, data);
   if (result || resultMessage) {
     row.append(createSaveResult(message, token, resultMessage));
     return row;
   }
 
-  const button = document.createElement("button");
+  const button = createIconButton("daavy-addons-target-helper-save", '<i class="fa-solid fa-dice-d20 fa-fw" inert></i>', game.i18n.localize("DAAVY_ADDONS.TargetHelper.RollSave"));
   const canRoll = (game.user.isGM || token.isOwner) && !!token.actor?.getStatistic(data.save.statistic);
 
-  button.type = "button";
-  button.className = "daavy-addons-target-helper-save";
-  button.innerHTML = '<i class="fa-solid fa-dice-d20 fa-fw" inert></i>';
-  button.title = game.i18n.localize("DAAVY_ADDONS.TargetHelper.RollSave");
-  button.setAttribute("aria-label", button.title);
   button.disabled = !canRoll;
   bindPendingButton(button, (event) => rollSave(message, token, data.save, event));
   row.append(button);
@@ -682,23 +682,48 @@ function createTargetRow(token) {
 }
 
 function resolveSaveResultMessage(parentMessage, token, data) {
-  const result = data.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
-  const stored = game.messages.get(result?.resultMessageId);
-  if (stored) return stored;
+  return indexSaveResultMessages(parentMessage, [token], data).get(token.uuid) ?? null;
+}
 
-  return game.messages.contents.findLast((message) => {
-    const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
-    const context = message.flags?.pf2e?.context;
-    const author = message.author;
-    return (
-      link?.parentMessageId === parentMessage.id
-      && link?.targetUuid === token.uuid
-      && context?.options?.includes("check:reroll:hero-points")
-      && author
-      && (author.isGM || token.actor.testUserPermission(author, "OWNER"))
-      && isLinkedSaveResult(message, token, data.save, link, true)
+function indexSaveResultMessages(parentMessage, targets, data) {
+  const storedByTarget = new Map();
+  for (const result of data.saveResults ?? []) {
+    if (!storedByTarget.has(result?.targetUuid)) {
+      storedByTarget.set(result?.targetUuid, game.messages.get(result?.resultMessageId) ?? null);
+    }
+  }
+
+  const indexed = new Map([...storedByTarget].filter(([, message]) => message));
+  const unresolved = new Map(
+    targets
+      .filter((target) => !indexed.has(target.uuid))
+      .map((target) => [target.uuid, target])
+  );
+  for (let index = game.messages.contents.length - 1; index >= 0 && unresolved.size; index -= 1) {
+    const message = game.messages.contents[index];
+    const target = unresolved.get(
+      message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)?.targetUuid
     );
-  }) ?? null;
+    if (target && isHeroPointSaveReroll(message, parentMessage, target, data)) {
+      indexed.set(target.uuid, message);
+      unresolved.delete(target.uuid);
+    }
+  }
+  return indexed;
+}
+
+function isHeroPointSaveReroll(message, parentMessage, token, data) {
+  const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+  const context = message.flags?.pf2e?.context;
+  const author = message.author;
+  return (
+    link?.parentMessageId === parentMessage.id
+    && link?.targetUuid === token.uuid
+    && context?.options?.includes("check:reroll:hero-points")
+    && author
+    && (author.isGM || token.actor.testUserPermission(author, "OWNER"))
+    && isLinkedSaveResult(message, token, data.save, link, true)
+  );
 }
 
 function createSaveResult(parentMessage, token, resultMessage) {
@@ -738,13 +763,15 @@ function createHeroPointRerollButton(parentMessage, token, resultMessage) {
   );
   if (!canReroll) return null;
 
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "daavy-addons-target-helper-hero-reroll";
-  button.innerHTML = '<i class="fa-solid fa-circle-h fa-fw" inert></i>';
-  button.title = game.i18n.localize("PF2E.RerollMenu.HeroPoint");
-  button.setAttribute("aria-label", button.title);
+  const button = createIconButton("daavy-addons-target-helper-hero-reroll", '<i class="fa-solid fa-circle-h fa-fw" inert></i>', game.i18n.localize("PF2E.RerollMenu.HeroPoint"));
   bindPendingButton(button, () => rerollSave(parentMessage, token, resultMessage));
+  return button;
+}
+
+function createIconButton(className, icon, title) {
+  const button = document.createElement("button");
+  Object.assign(button, { type: "button", className, innerHTML: icon, title });
+  button.setAttribute("aria-label", title);
   return button;
 }
 
@@ -973,7 +1000,13 @@ function isBasicSave(save) {
     && save.options.some((option) => ["damaging-effect", "area-damage"].includes(option));
 }
 
-async function rollSave(message, token, save, event, automated = false, deferStorage = false) {
+async function rollSave(message, token, save, event, options = {}) {
+  const {
+    automated = false,
+    deferStorage = false,
+    item: resolvedItem,
+    origin: resolvedOrigin
+  } = options;
   if (!message.canUserModify(game.user, "update") && !game.users.activeGM) {
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.NoActiveGM", { localize: true });
     return false;
@@ -983,8 +1016,12 @@ async function rollSave(message, token, save, event, automated = false, deferSto
   if (!statistic || !(game.user.isGM || token.isOwner)) return false;
 
   try {
-    const item = await resolveUuid(save.itemUuid) ?? getSpellLikeItem(message) ?? message.item;
-    const origin = await resolveUuid(save.originUuid) ?? message.actor;
+    const item = Object.hasOwn(options, "item")
+      ? resolvedItem
+      : await resolveUuid(save.itemUuid) ?? getSpellLikeItem(message) ?? message.item;
+    const origin = Object.hasOwn(options, "origin")
+      ? resolvedOrigin
+      : await resolveUuid(save.originUuid) ?? message.actor;
     let rollData = null;
 
     await statistic.check.roll({
@@ -1013,7 +1050,7 @@ async function rollSave(message, token, save, event, automated = false, deferSto
     if (deferStorage) return resultMessage;
 
     if (message.canUserModify(game.user, "update")) {
-      const stored = await appendResult(message, "saveResults", token.uuid, resultMessage.id);
+      const stored = await appendSaveResult(message, token.uuid, resultMessage.id);
       if (!stored) await resultMessage.delete();
     } else {
       emitTargetHelperRequest(TARGET_HELPER_SAVE_RESULT_FLAG, message, token, {
@@ -1103,13 +1140,13 @@ async function createSaveResultMessage(parentMessage, token, { outcome, rollMess
   return getDocumentClass("ChatMessage").create(source, { render: !preserveVisibility });
 }
 
-async function appendResult(message, resultKey, targetUuid, resultMessageId) {
+async function appendSaveResult(message, targetUuid, resultMessageId) {
   const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-  const results = Array.isArray(data?.[resultKey]) ? data[resultKey] : [];
+  const results = Array.isArray(data?.saveResults) ? data.saveResults : [];
   if (results.some((result) => result?.targetUuid === targetUuid)) return false;
 
   await message.update({
-    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.${resultKey}`]: [
+    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.saveResults`]: [
       ...results,
       { targetUuid, resultMessageId }
     ]
@@ -1212,7 +1249,7 @@ async function handleSaveResultSocket(payload, sender) {
       return;
     }
 
-    const stored = await appendResult(parent, "saveResults", payload.targetUuid, result.id);
+    const stored = await appendSaveResult(parent, payload.targetUuid, result.id);
     if (!stored) await result.delete();
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to store Target Helper save`, error);
@@ -1384,7 +1421,6 @@ async function applyDamage(message, token, multiplier, renderResult = true) {
         origin: message.actor,
         target: token.actor,
         item,
-        domains: ["damage-received"],
         options: messageRollOptions
       })
       : [];
@@ -1529,20 +1565,19 @@ async function finalizeDamageUndo(parentMessage, token, result) {
   return true;
 }
 
-async function extractEphemeralEffects({ origin, target, item, domains, options }) {
+async function extractEphemeralEffects({ origin, target, item, options }) {
   if (!(origin && target)) return [];
 
   const test = [
     ...options,
-    origin.getRollOptions(domains),
+    origin.getRollOptions(["damage-received"]),
     target.getSelfRollOptions("target")
   ].flat();
   const resolvables = item
     ? item.isOfType("spell") ? { spell: item } : { weapon: item }
     : {};
   const effects = await Promise.all(
-    domains
-      .flatMap((domain) => origin.synthetics.ephemeralEffects[domain]?.target ?? [])
+    (origin.synthetics.ephemeralEffects["damage-received"]?.target ?? [])
       .map((effect) => effect({ test, resolvables }))
   );
 
