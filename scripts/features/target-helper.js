@@ -34,7 +34,7 @@ const BASIC_SAVE_MULTIPLIERS = {
 
 export function registerTargetHelperHooks() {
   Hooks.on("preCreateChatMessage", captureTargets);
-  Hooks.on("createChatMessage", refreshDamageParent);
+  Hooks.on("createChatMessage", refreshRelatedMessages);
   Hooks.on("updateChatMessage", refreshLinkedDamageHelpers);
   Hooks.on("deleteChatMessage", refreshRelatedMessages);
   Hooks.on("renderChatMessageHTML", renderTargetHelper);
@@ -197,8 +197,9 @@ function findDamageResultMessage(parentMessageId, targetUuid, excludedMessageId 
   }) ?? null;
 }
 
-async function refreshDamageParent(message) {
-  const link = message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG);
+async function refreshResultParent(message) {
+  const link = message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG)
+    ?? message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
   const parent = game.messages.get(link?.parentMessageId);
   if (parent && document.querySelector(`li.chat-message[data-message-id="${parent.id}"]`)) {
     await ui.chat.updateMessage(parent);
@@ -220,7 +221,7 @@ async function refreshLinkedDamageHelpers(message) {
 
 async function refreshRelatedMessages(message) {
   await Promise.all([
-    refreshDamageParent(message),
+    refreshResultParent(message),
     refreshLinkedDamageHelpers(message)
   ]);
 }
@@ -256,8 +257,7 @@ function getRecommendedDamageMultiplier(message, token, data) {
     return null;
   }
 
-  const result = saveData.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
-  const resultMessage = game.messages.get(result?.resultMessageId);
+  const resultMessage = resolveSaveResultMessage(saveMessage, token, saveData);
   const outcome = resultMessage?.visible
     ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)?.outcome
     : null;
@@ -345,8 +345,9 @@ function createIwrInfo(resultMessage) {
 function createSaveRow(message, token, data) {
   const row = createTargetRow(token);
   const result = data.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
-  if (result) {
-    row.append(createSaveResult(result));
+  const resultMessage = resolveSaveResultMessage(message, token, data);
+  if (result || resultMessage) {
+    row.append(createSaveResult(message, token, resultMessage));
     return row;
   }
 
@@ -386,9 +387,28 @@ function createTargetRow(token) {
   return row;
 }
 
-function createSaveResult(result) {
+function resolveSaveResultMessage(parentMessage, token, data) {
+  const result = data.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
+  const stored = game.messages.get(result?.resultMessageId);
+  if (stored) return stored;
+
+  return game.messages.contents.findLast((message) => {
+    const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+    const context = message.flags?.pf2e?.context;
+    const author = message.author;
+    return (
+      link?.parentMessageId === parentMessage.id
+      && link?.targetUuid === token.uuid
+      && context?.options?.includes("check:reroll:hero-points")
+      && author
+      && (author.isGM || token.actor.testUserPermission(author, "OWNER"))
+      && isLinkedSaveResult(message, token, data.save, link, true)
+    );
+  }) ?? null;
+}
+
+function createSaveResult(parentMessage, token, resultMessage) {
   const element = document.createElement("span");
-  const resultMessage = game.messages.get(result.resultMessageId);
   const resultData = resultMessage?.visible
     ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)
     : null;
@@ -409,7 +429,38 @@ function createSaveResult(result) {
     element.classList.add("hidden-result");
     element.textContent = game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
   }
+  const rerollButton = createHeroPointRerollButton(parentMessage, token, resultMessage);
+  if (rerollButton) element.prepend(rerollButton);
   return element;
+}
+
+function createHeroPointRerollButton(parentMessage, token, resultMessage) {
+  const actor = token.actor;
+  const canReroll = (
+    actor?.isOfType("character")
+    && actor.heroPoints.value > 0
+    && resultMessage?.rolls.at(0)?.isRerollable === true
+    && (game.user.isGM || (token.isOwner && resultMessage.isAuthor))
+  );
+  if (!canReroll) return null;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "daavy-addons-target-helper-hero-reroll";
+  button.innerHTML = '<i class="fa-solid fa-circle-h fa-fw" inert></i>';
+  button.title = game.i18n.localize("PF2E.RerollMenu.HeroPoint");
+  button.setAttribute("aria-label", button.title);
+  button.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    button.disabled = true;
+    button.classList.add("pending");
+    const submitted = await rerollSave(parentMessage, token, resultMessage);
+    if (!submitted && button.isConnected) {
+      button.disabled = false;
+      button.classList.remove("pending");
+    }
+  });
+  return button;
 }
 
 function removeNativeSaveControl(content, save) {
@@ -676,6 +727,60 @@ async function rollSave(message, token, save, event) {
   }
 }
 
+async function rerollSave(parentMessage, token, resultMessage) {
+  const actor = token.actor;
+  const link = resultMessage?.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+  const context = resultMessage?.flags?.pf2e?.context;
+  const save = parentMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.save;
+  if (
+    !actor?.isOfType("character")
+    || actor.heroPoints.value < 1
+    || resultMessage?.rolls.at(0)?.isRerollable !== true
+    || !(game.user.isGM || (token.isOwner && resultMessage.isAuthor))
+    || link?.parentMessageId !== parentMessage.id
+    || link?.targetUuid !== token.uuid
+    || !isValidSave(save)
+    || !isLinkedSaveResult(resultMessage, token, save, link)
+  ) {
+    return false;
+  }
+
+  const prepareReroll = (message, _data, _options, userId) => {
+    const rerollContext = message.flags?.pf2e?.context;
+    if (
+      userId !== game.user.id
+      || rerollContext?.isReroll !== true
+      || !rerollContext.options?.includes("check:reroll:hero-points")
+      || rerollContext.target?.actor !== context.target?.actor
+      || rerollContext.origin?.actor !== context.origin?.actor
+      || rerollContext.dc?.value !== context.dc?.value
+      || message.flags?.pf2e?.modifierName !== resultMessage.flags?.pf2e?.modifierName
+      || !TARGET_HELPER_SAVE_OUTCOMES.includes(rerollContext.outcome)
+    ) {
+      return;
+    }
+
+    message.updateSource({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_SAVE_RESULT_FLAG}`]: {
+        ...link,
+        outcome: rerollContext.outcome
+      }
+    });
+  };
+
+  Hooks.on("preCreateChatMessage", prepareReroll);
+  try {
+    await game.pf2e.Check.rerollFromMessage(resultMessage, { resource: "hero-points" });
+    return !game.messages.has(resultMessage.id);
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to reroll Target Helper save`, error);
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.SaveError", { localize: true });
+    return false;
+  } finally {
+    Hooks.off("preCreateChatMessage", prepareReroll);
+  }
+}
+
 async function createSaveResultMessage(parentMessage, token, { outcome, rollMessage }) {
   const source = rollMessage.toObject();
   delete source._id;
@@ -862,14 +967,14 @@ async function handleDamageUndoSocket(payload, sender) {
   }
 }
 
-function isLinkedSaveResult(message, target, save, link) {
+function isLinkedSaveResult(message, target, save, link, reroll = false) {
   const context = message.flags?.pf2e?.context;
   return (
     context?.type === "saving-throw"
     && context.target?.actor === target.actor.uuid
     && context.dc?.value === save.dc
     && context.outcome === link.outcome
-    && context.isReroll !== true
+    && (context.isReroll === true) === reroll
     && message.flags?.pf2e?.modifierName === save.statistic
   );
 }
