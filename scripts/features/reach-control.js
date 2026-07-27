@@ -1,35 +1,143 @@
-import { MODULE_ID, REACH_CONTROL_RANGE_FLAG, SETTINGS } from "../../constants.js";
-import { getSetting, isReachControlEnabled } from "../../settings.js";
+import {
+  MODULE_ID,
+  REACH_CONTROL_RANGE_FLAG,
+  REACH_CONTROL_WRAPPER_MARK,
+  REACH_RANGE,
+  REACH_TYPES,
+  SETTINGS
+} from "../constants.js";
+import { getSetting } from "../utils.js";
 
-const REACH_TYPES = {
-  doors: {
-    enabledSetting: SETTINGS.REACH_DOORS,
-    rangeSetting: SETTINGS.REACH_DOOR_RANGE,
-    gmSetting: SETTINGS.REACH_DOORS_AFFECT_GM,
-    label: "Door",
-    warnWhenMissingToken: false
-  },
-  stairways: {
-    enabledSetting: SETTINGS.REACH_STAIRWAYS,
-    rangeSetting: SETTINGS.REACH_STAIRWAY_RANGE,
-    gmSetting: SETTINGS.REACH_STAIRWAYS_AFFECT_GM,
-    label: "Stairway",
-    warnWhenMissingToken: true
-  },
-  tokens: {
-    enabledSetting: SETTINGS.REACH_TOKENS,
-    rangeSetting: SETTINGS.REACH_TOKEN_RANGE,
-    label: "Token",
-    warnWhenMissingToken: true
-  }
-};
+let pendingTokenInteraction = null;
 
-export function isReachIntegrationEnabled(type) {
-  const config = REACH_TYPES[type];
-  return Boolean(config && isReachControlEnabled() && getSetting(config.enabledSetting));
+export function registerReachControlHooks() {
+  Hooks.once("setup", installInteractionWrappers);
+  Hooks.on("PreStairwayTeleport", handleStairwayTeleport);
+  Hooks.on("renderPlaceableConfig", addPerObjectRangeField);
+  Hooks.on("renderStairwayConfig", addPerObjectRangeField);
 }
 
-export function captureTokenSelection({ excludedTokenId = null, tokenIds = null } = {}) {
+function installInteractionWrappers() {
+  const DoorControl = foundry.canvas?.containers?.DoorControl ?? globalThis.DoorControl;
+  wrapMethod(DoorControl?.prototype, "_onMouseDown", createDoorWrapper);
+  wrapMethod(CONFIG.Token?.objectClass?.prototype, "_onClickLeft", createTokenClickWrapper);
+  wrapMethod(CONFIG.Token?.objectClass?.prototype, "_onClickLeft2", createTokenDoubleClickWrapper);
+}
+
+function createDoorWrapper(original) {
+  return function reachControlDoorMouseDown(event, ...args) {
+    if (event?.button !== 0 || !isReachIntegrationEnabled("doors")) {
+      return original.call(this, event, ...args);
+    }
+
+    const result = evaluateReach("doors", this);
+    if (!result.allowed) return undefined;
+    restoreTokenSelection(result.token);
+    return original.call(this, event, ...args);
+  };
+}
+
+function createTokenClickWrapper(original) {
+  return function reachControlTokenClick(event, ...args) {
+    if (!isReachIntegrationEnabled("tokens")) {
+      pendingTokenInteraction = null;
+    } else if (pendingTokenInteraction?.target !== this || Date.now() - pendingTokenInteraction.capturedAt > 500) {
+      pendingTokenInteraction = {
+        target: this,
+        selection: captureTokenSelection({ excludedTokenId: this.id }),
+        capturedAt: Date.now()
+      };
+    }
+    return original.call(this, event, ...args);
+  };
+}
+
+function createTokenDoubleClickWrapper(original) {
+  return function reachControlTokenDoubleClick(event, ...args) {
+    if (!isReachIntegrationEnabled("tokens")) {
+      pendingTokenInteraction = null;
+      return original.call(this, event, ...args);
+    }
+
+    const selection = pendingTokenInteraction?.target === this
+      ? pendingTokenInteraction.selection
+      : captureTokenSelection({ excludedTokenId: this.id });
+    pendingTokenInteraction = null;
+
+    const result = evaluateReach("tokens", this, selection);
+    if (!result.allowed) return undefined;
+    restoreTokenSelection(result.token);
+    return original.call(this, event, ...args);
+  };
+}
+
+function wrapMethod(prototype, methodName, createWrapper) {
+  const original = prototype?.[methodName];
+  if (typeof original !== "function" || original[REACH_CONTROL_WRAPPER_MARK]) return;
+
+  const wrapped = createWrapper(original);
+  Object.defineProperty(wrapped, REACH_CONTROL_WRAPPER_MARK, { value: true });
+  prototype[methodName] = wrapped;
+}
+
+function handleStairwayTeleport(data) {
+  if (!isReachIntegrationEnabled("stairways")) return true;
+
+  const selection = captureTokenSelection({ tokenIds: data?.selectedTokenIds ?? [] });
+  const target = data?.sourceData?.object ?? data?.sourceData;
+  const result = evaluateReach("stairways", target, selection);
+  restoreTokenSelection(result.token);
+  return result.allowed;
+}
+
+function addPerObjectRangeField(app, html) {
+  if (!game.user?.isGM || getSetting(SETTINGS.REACH_CONTROL) !== true) return;
+
+  const source = app?.document ?? app?.object?._object ?? app?.object;
+  const document = source?.document ?? source;
+  if (
+    !document
+    || !html
+    || !(
+      ["Token", "Stairway"].includes(document.documentName)
+      || (document.documentName === "Wall" && document.door > 0)
+    )
+  ) return;
+  if (html.querySelector("[data-reach-control-range]")) return;
+
+  const input = html.ownerDocument.createElement("input");
+  input.type = "number";
+  input.name = `flags.${MODULE_ID}.${REACH_CONTROL_RANGE_FLAG}`;
+  input.value = String(Number(document.getFlag?.(MODULE_ID, REACH_CONTROL_RANGE_FLAG)) || 0);
+  input.min = String(REACH_RANGE.min);
+  input.max = String(REACH_RANGE.max);
+  input.step = String(REACH_RANGE.step);
+  input.dataset.dtype = "Number";
+
+  const group = foundry.applications.fields.createFormGroup({
+    input,
+    label: "DAAVY_ADDONS.ReachControl.PerObjectRange.Label",
+    hint: "DAAVY_ADDONS.ReachControl.PerObjectRange.Hint",
+    localize: true
+  });
+  group.dataset.reachControlRange = "";
+
+  const anchor = html.querySelector("footer.form-footer")
+    ?? html.querySelector('button[type="submit"]');
+  anchor?.before(group);
+  app.setPosition?.();
+}
+
+function isReachIntegrationEnabled(type) {
+  const config = REACH_TYPES[type];
+  return Boolean(
+    config
+    && getSetting(SETTINGS.REACH_CONTROL) === true
+    && getSetting(config.enabledSetting)
+  );
+}
+
+function captureTokenSelection({ excludedTokenId = null, tokenIds = null } = {}) {
   const tokens = Array.isArray(tokenIds)
     ? tokenIds.map((id) => canvas.tokens?.placeables?.find((token) => token.id === id)).filter(Boolean)
     : [...(canvas.tokens?.controlled ?? [])];
@@ -50,11 +158,14 @@ export function captureTokenSelection({ excludedTokenId = null, tokenIds = null 
   };
 }
 
-export function evaluateReach(type, target, selection = captureTokenSelection()) {
+function evaluateReach(type, target, selection = captureTokenSelection()) {
   const config = REACH_TYPES[type];
   if (!config || !isReachIntegrationEnabled(type)) return { allowed: true, token: selection.token };
 
-  if (shouldBypassForGM(config, selection)) {
+  if (
+    game.user?.isGM
+    && (!config.gmSetting || !getSetting(config.gmSetting) || selection.controlledCount !== 1)
+  ) {
     return { allowed: true, token: selection.token };
   }
 
@@ -70,7 +181,15 @@ export function evaluateReach(type, target, selection = captureTokenSelection())
 
   const allowed = getDistanceToTarget(type, selection.token, target) <= getConfiguredRange(type, target);
 
-  if (!allowed) notify("DAAVY_ADDONS.ReachControl.Warnings.OutOfReach", { placeable: localizePlaceable(config.label), tokenName: getTokenName(selection.token) });
+  if (!allowed) {
+    notify("DAAVY_ADDONS.ReachControl.Warnings.OutOfReach", {
+      placeable: localizePlaceable(config.label),
+      tokenName: selection.token?.actor?.name
+        ?? selection.token?.name
+        ?? selection.token?.document?.name
+        ?? ""
+    });
+  }
 
   return { allowed, token: selection.token };
 }
@@ -96,10 +215,11 @@ function getDistanceToTarget(type, token, target) {
   const horizontalPixels = getHorizontalDistance(type, targetDocument, tokenRectangle, gridSize);
   const verticalDistance = getVerticalDistance(tokenDocument, targetDocument);
 
-  return distanceInGridSpaces(horizontalPixels, verticalDistance, gridSize, gridDistance);
+  if (!(gridSize > 0) || !(gridDistance > 0)) return Infinity;
+  return Math.hypot(horizontalPixels / gridSize, verticalDistance / gridDistance);
 }
 
-export function restoreTokenSelection(token) {
+function restoreTokenSelection(token) {
   if (!token || token.controlled) return;
   const current = canvas.tokens?.placeables?.find((placeable) => placeable.id === token.id);
   current?.control?.({ releaseOthers: true });
@@ -107,18 +227,10 @@ export function restoreTokenSelection(token) {
 
 function getOwnedFallbackToken(excludedTokenId) {
   const placeables = canvas.tokens?.placeables ?? [];
-  const characterToken = placeables.find((token) => {
-    return token.id !== excludedTokenId && token.document?.actorId === game.user?.character?.id;
-  });
+  const characterToken = placeables.find((token) => token.id !== excludedTokenId && token.document?.actorId === game.user?.character?.id);
   if (characterToken) return characterToken;
 
   return placeables.find((token) => token.id !== excludedTokenId && token.document?.isOwner === true) ?? null;
-}
-
-function shouldBypassForGM(config, selection) {
-  if (!game.user?.isGM) return false;
-  if (!config.gmSetting || !getSetting(config.gmSetting)) return true;
-  return selection.controlledCount !== 1;
 }
 
 function getHorizontalDistance(type, targetDocument, tokenRectangle, gridSize) {
@@ -202,10 +314,6 @@ function localizePlaceable(label) {
   return game.i18n.localize(`DAAVY_ADDONS.ReachControl.Placeables.${label}`);
 }
 
-function getTokenName(token) {
-  return token?.actor?.name ?? token?.name ?? token?.document?.name ?? "";
-}
-
 function normalizeRectangle(rectangle) {
   const left = Math.min(rectangle.x, rectangle.x + rectangle.width);
   const right = Math.max(rectangle.x, rectangle.x + rectangle.width);
@@ -242,56 +350,19 @@ function segmentToRectangleDistance(segment, rectangle) {
   if (
     pointIsInsideRectangle(segment.a, bounds) ||
     pointIsInsideRectangle(segment.b, bounds) ||
-    edges.some(([start, end]) => segmentsIntersect(segment.a, segment.b, start, end))
+    edges.some(([start, end]) => foundry.utils.lineSegmentIntersects(segment.a, segment.b, start, end))
   ) return 0;
 
   return Math.min(
     pointToRectangleDistance(segment.a, rectangle),
     pointToRectangleDistance(segment.b, rectangle),
-    ...corners.map((corner) => pointToSegmentDistance(corner, segment.a, segment.b))
+    ...corners.map((corner) => {
+      const closest = foundry.utils.closestPointToSegment(corner, segment.a, segment.b);
+      return Math.hypot(corner.x - closest.x, corner.y - closest.y);
+    })
   );
-}
-
-function distanceInGridSpaces(horizontalPixels, verticalDistance, gridSize, gridDistance) {
-  if (!(gridSize > 0) || !(gridDistance > 0)) return Infinity;
-  return Math.hypot(horizontalPixels / gridSize, verticalDistance / gridDistance);
 }
 
 function pointIsInsideRectangle(point, bounds) {
   return point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom;
-}
-
-function pointToSegmentDistance(point, start, end) {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const lengthSquared = dx * dx + dy * dy;
-  if (lengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
-
-  const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
-  const amount = Math.max(0, Math.min(1, projection));
-  return Math.hypot(point.x - (start.x + amount * dx), point.y - (start.y + amount * dy));
-}
-
-function segmentsIntersect(a, b, c, d) {
-  const abC = cross(a, b, c);
-  const abD = cross(a, b, d);
-  const cdA = cross(c, d, a);
-  const cdB = cross(c, d, b);
-
-  if (abC === 0 && pointIsOnSegment(c, a, b)) return true;
-  if (abD === 0 && pointIsOnSegment(d, a, b)) return true;
-  if (cdA === 0 && pointIsOnSegment(a, c, d)) return true;
-  if (cdB === 0 && pointIsOnSegment(b, c, d)) return true;
-  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
-}
-
-function cross(a, b, point) {
-  return (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
-}
-
-function pointIsOnSegment(point, start, end) {
-  return point.x >= Math.min(start.x, end.x) &&
-    point.x <= Math.max(start.x, end.x) &&
-    point.y >= Math.min(start.y, end.y) &&
-    point.y <= Math.max(start.y, end.y);
 }

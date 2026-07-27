@@ -3,7 +3,7 @@ import {
   REACH_RANGE,
   SETTINGS
 } from "./constants.js";
-import { asHTMLElement } from "./dom.js";
+import { getSetting } from "./utils.js";
 
 const SETTING_DEFINITIONS = {
   [SETTINGS.TARGET_HELPER]: {
@@ -43,15 +43,13 @@ const REACH_SECTIONS = {
 };
 
 export function registerSettings() {
-  for (const [key, { label, defaultValue, config = true }] of Object.entries(SETTING_DEFINITIONS)) {
+  for (const [key, { label, defaultValue }] of Object.entries(SETTING_DEFINITIONS)) {
     const type = typeof defaultValue === "boolean" ? Boolean : Number;
     game.settings.register(MODULE_ID, key, {
       name: `DAAVY_ADDONS.Settings.${label}.Name`,
       hint: `DAAVY_ADDONS.Settings.${label}.Hint`,
       scope: "world",
-      config: [SETTINGS.TARGET_HELPER, SETTINGS.TARGET_HELPER_AUTOMATIONS].includes(key)
-        ? game.system.id === "pf2e"
-        : config,
+      config: !key.startsWith("targetHelper") || game.system.id === "pf2e",
       type,
       default: defaultValue,
       ...(type === Number ? { range: REACH_RANGE } : {})
@@ -59,21 +57,12 @@ export function registerSettings() {
   }
 }
 
-export function getSetting(key) {
-  return game.settings.get(MODULE_ID, key);
-}
-
-export function isReachControlEnabled() {
-  return getSetting(SETTINGS.REACH_CONTROL) === true;
-}
-
 export function organizeSettingsConfig(html) {
-  const container = asHTMLElement(html);
-  if (!container || container.querySelector('[data-settings-group="Features"]')) return;
+  if (!html || html.querySelector('[data-settings-group="Features"]')) return;
 
-  const documentRef = container.ownerDocument ?? document;
+  const documentRef = html.ownerDocument;
   const featureRows = [SETTINGS.TARGET_HELPER, SETTINGS.REACH_CONTROL]
-    .map((key) => findSettingRow(container, key))
+    .map((key) => findSettingRow(html, key))
     .filter(Boolean);
   if (!featureRows.length) return;
 
@@ -81,18 +70,18 @@ export function organizeSettingsConfig(html) {
   featureRows[0].replaceWith(featuresGroup);
   appendRows(featuresGroup, featureRows);
 
-  const automationRow = findSettingRow(container, SETTINGS.TARGET_HELPER_AUTOMATIONS);
+  const automationRow = findSettingRow(html, SETTINGS.TARGET_HELPER_AUTOMATIONS);
   if (automationRow) {
     const targetHelperGroup = createGroup(documentRef, "TargetHelper");
     appendRows(targetHelperGroup, [automationRow]);
     featuresGroup.after(targetHelperGroup);
-    configureVisibility(container, SETTINGS.TARGET_HELPER, [targetHelperGroup]);
+    configureVisibility(html, SETTINGS.TARGET_HELPER, [targetHelperGroup]);
   }
 
   const sectionRows = Object.fromEntries(
     Object.entries(REACH_SECTIONS).map(([section, keys]) => [
       section,
-      keys.map((key) => findSettingRow(container, key)).filter(Boolean)
+      keys.map((key) => findSettingRow(html, key)).filter(Boolean)
     ])
   );
   const firstReachRow = Object.values(sectionRows).flat()[0];
@@ -103,22 +92,27 @@ export function organizeSettingsConfig(html) {
 
   for (const [sectionKey, rows] of Object.entries(sectionRows)) {
     if (!rows.length) continue;
-    const section = createSection(documentRef, sectionKey);
+    const section = documentRef.createElement("section");
+    const title = documentRef.createElement("h4");
+    title.className = "daavy-addons-settings-section-title";
+    title.textContent = game.i18n.localize(`DAAVY_ADDONS.Settings.Sections.${sectionKey}`);
+    section.className = "daavy-addons-settings-section";
+    section.appendChild(title);
     appendRows(section, rows);
     reachGroup.appendChild(section);
   }
 
-  configureVisibility(container, SETTINGS.REACH_CONTROL, [reachGroup]);
-  configureVisibility(container, SETTINGS.REACH_DOORS, [
-    findSettingRow(container, SETTINGS.REACH_DOOR_RANGE),
-    findSettingRow(container, SETTINGS.REACH_DOORS_AFFECT_GM)
+  configureVisibility(html, SETTINGS.REACH_CONTROL, [reachGroup]);
+  configureVisibility(html, SETTINGS.REACH_DOORS, [
+    findSettingRow(html, SETTINGS.REACH_DOOR_RANGE),
+    findSettingRow(html, SETTINGS.REACH_DOORS_AFFECT_GM)
   ]);
-  configureVisibility(container, SETTINGS.REACH_STAIRWAYS, [
-    findSettingRow(container, SETTINGS.REACH_STAIRWAY_RANGE),
-    findSettingRow(container, SETTINGS.REACH_STAIRWAYS_AFFECT_GM)
+  configureVisibility(html, SETTINGS.REACH_STAIRWAYS, [
+    findSettingRow(html, SETTINGS.REACH_STAIRWAY_RANGE),
+    findSettingRow(html, SETTINGS.REACH_STAIRWAYS_AFFECT_GM)
   ]);
-  configureVisibility(container, SETTINGS.REACH_TOKENS, [
-    findSettingRow(container, SETTINGS.REACH_TOKEN_RANGE)
+  configureVisibility(html, SETTINGS.REACH_TOKENS, [
+    findSettingRow(html, SETTINGS.REACH_TOKEN_RANGE)
   ]);
 }
 
@@ -137,16 +131,6 @@ function createGroup(documentRef, groupKey) {
   title.textContent = game.i18n.localize(`DAAVY_ADDONS.Settings.Groups.${groupKey}`);
   group.appendChild(title);
   return group;
-}
-
-function createSection(documentRef, sectionKey) {
-  const section = documentRef.createElement("section");
-  const title = documentRef.createElement("h4");
-  title.className = "daavy-addons-settings-section-title";
-  title.textContent = game.i18n.localize(`DAAVY_ADDONS.Settings.Sections.${sectionKey}`);
-  section.className = "daavy-addons-settings-section";
-  section.appendChild(title);
-  return section;
 }
 
 function appendRows(target, rows) {

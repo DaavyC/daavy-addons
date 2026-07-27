@@ -1,14 +1,15 @@
-import { MODULE_ID } from "./constants.js";
-import { asHTMLElement } from "./dom.js";
+import {
+  FEEDBACK_ACTIONS_CLASS,
+  FEEDBACK_I18N_PREFIX,
+  MODULE_ID
+} from "./constants.js";
 
 const FEEDBACK_ENDPOINT = "https://feedback.daavyc.workers.dev";
 const FEEDBACK_TEMPLATE = `modules/${MODULE_ID}/templates/feedback.hbs`;
 const DONATE_URL = "https://ko-fi.com/daavy";
 const DISCORD_URL = "https://discord.gg/ZmFZxdGrta";
 const MAX_MESSAGE_LENGTH = 3000;
-const I18N_PREFIX = "DAAVY_ADDONS.Feedback";
 const CATEGORIES = ["Bug", "Suggestion"];
-const ACTIONS_CLASS = "daavy-addons-settings-actions";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -17,7 +18,7 @@ class FeedbackForm extends HandlebarsApplicationMixin(ApplicationV2) {
     id: "daavy-addons-feedback",
     tag: "form",
     window: {
-      title: `${I18N_PREFIX}.MenuLabel`,
+      title: `${FEEDBACK_I18N_PREFIX}.MenuLabel`,
       icon: "fa-solid fa-comment-dots",
       contentClasses: ["standard-form"]
     },
@@ -45,7 +46,7 @@ class FeedbackForm extends HandlebarsApplicationMixin(ApplicationV2) {
     const category = String(formData.object.category ?? "").trim();
     const message = String(formData.object.message ?? "").trim();
     if (!CATEGORIES.includes(category) || !message || message.length > MAX_MESSAGE_LENGTH) {
-      ui.notifications.warn(game.i18n.localize(`${I18N_PREFIX}.Invalid`));
+      ui.notifications.warn(game.i18n.localize(`${FEEDBACK_I18N_PREFIX}.Invalid`));
       return;
     }
     if (!game.user?.isGM) return;
@@ -74,11 +75,11 @@ class FeedbackForm extends HandlebarsApplicationMixin(ApplicationV2) {
 
       if (!response.ok) throw new Error(`Feedback request failed with status ${response.status}.`);
 
-      ui.notifications.info(game.i18n.localize(`${I18N_PREFIX}.Success`));
+      ui.notifications.info(game.i18n.localize(`${FEEDBACK_I18N_PREFIX}.Success`));
       await this.close();
     } catch (error) {
       console.error(`${MODULE_ID} | Unable to send feedback.`, error);
-      ui.notifications.error(game.i18n.localize(`${I18N_PREFIX}.Error`));
+      ui.notifications.error(game.i18n.localize(`${FEEDBACK_I18N_PREFIX}.Error`));
     } finally {
       this.#submitting = false;
       if (submitButton) submitButton.disabled = false;
@@ -87,15 +88,14 @@ class FeedbackForm extends HandlebarsApplicationMixin(ApplicationV2) {
 }
 
 export function injectFeedbackButtons(html) {
-  const container = asHTMLElement(html);
-  if (!container || !game.user?.isGM || container.querySelector(`.${ACTIONS_CLASS}`)) return;
+  if (!html || !game.user?.isGM || html.querySelector(`.${FEEDBACK_ACTIONS_CLASS}`)) return;
 
-  const firstGroup = container.querySelector(".daavy-addons-settings-group");
+  const firstGroup = html.querySelector(".daavy-addons-settings-group");
   if (!firstGroup) return;
 
-  const documentRef = container.ownerDocument;
+  const documentRef = html.ownerDocument;
   const actions = documentRef.createElement("div");
-  actions.className = ACTIONS_CLASS;
+  actions.className = FEEDBACK_ACTIONS_CLASS;
 
   const donateButton = createButton(documentRef, {
     className: "daavy-addons-donate-action",
@@ -114,9 +114,9 @@ export function injectFeedbackButtons(html) {
   const feedbackButton = createButton(documentRef, {
     className: "daavy-addons-feedback-action",
     icon: "fa-solid fa-comment-dots",
-    label: game.i18n.localize(`${I18N_PREFIX}.MenuLabel`)
+    label: game.i18n.localize(`${FEEDBACK_I18N_PREFIX}.MenuLabel`)
   });
-  feedbackButton.title = game.i18n.localize(`${I18N_PREFIX}.MenuHint`);
+  feedbackButton.title = game.i18n.localize(`${FEEDBACK_I18N_PREFIX}.MenuHint`);
   feedbackButton.addEventListener("click", () => new FeedbackForm().render({ force: true }));
 
   actions.append(donateButton, discordButton, feedbackButton);

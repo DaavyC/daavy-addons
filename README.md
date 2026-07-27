@@ -27,7 +27,7 @@ This module includes standalone features and integrations that do not require de
 
 - **Foundry VTT**: Version 14
 - **Systems**: System-agnostic for Reach Control; PF2e for Target Helper Automations
-- **Optional modules**: PF2e Workbench and Stairways
+- **Optional modules**: Stairways
 
 ---
 

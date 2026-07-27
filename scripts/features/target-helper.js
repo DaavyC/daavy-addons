@@ -1,7 +1,10 @@
 import {
   MODULE_ID,
   SETTINGS,
+  TARGET_HELPER_BASIC_SAVE_MULTIPLIERS,
+  TARGET_HELPER_DAMAGE_ACTIONS,
   TARGET_HELPER_DAMAGE_RESULT_FLAG,
+  TARGET_HELPER_DAMAGE_UPDATE_PATHS,
   TARGET_HELPER_DAMAGE_UNDO_REQUEST,
   TARGET_HELPER_FLAG,
   TARGET_HELPER_SAVE_OUTCOMES,
@@ -9,37 +12,26 @@ import {
   TARGET_HELPER_SAVE_TYPES,
   TARGET_HELPER_SOCKET
 } from "../constants.js";
-import { asHTMLElement } from "../dom.js";
-import { getSetting } from "../settings.js";
+import { addPreCreateChatMessageHook } from "../hooks.js";
+import { getSetting, resolveUuid, resolveUuidSync as resolveTarget } from "../utils.js";
 
 const LONG_PRESS_DELAY = 500;
 const SINGLE_CLICK_DELAY = 250;
-const DAMAGE_UPDATE_PATHS = new Set([
-  "system.attributes.hp.temp",
-  "system.attributes.hp.sp.value",
-  "system.attributes.hp.value"
-]);
-const DAMAGE_ACTIONS = [
-  { key: "Damage", icon: '<i class="fa-solid fa-heart-crack fa-fw" inert></i>', multiplier: 1 },
-  { key: "Half", icon: '<i class="fa-solid fa-heart-crack fa-fw" inert></i>', multiplier: 0.5 },
-  { key: "Double", icon: '<img src="systems/pf2e/icons/damage/double.svg" alt="">', multiplier: 2 },
-  { key: "Block", icon: '<i class="fa-solid fa-shield-blank fa-fw" inert></i>', multiplier: 0 }
-];
-const BASIC_SAVE_MULTIPLIERS = {
-  criticalFailure: 2,
-  failure: 1,
-  success: 0.5,
-  criticalSuccess: 0
-};
-const automationLocks = new Set();
 let automationQueue = Promise.resolve();
 let pendingDamageAutomation = null;
 
 export function registerTargetHelperHooks() {
-  Hooks.on("preCreateChatMessage", captureTargets);
-  Hooks.on("createChatMessage", handleCreatedMessage);
+  addPreCreateChatMessageHook(captureTargets);
+  Hooks.on("createChatMessage", (message) => {
+    void refreshRelatedMessages(message);
+    queueTargetHelperAutomation(message);
+  });
   Hooks.on("updateChatMessage", refreshLinkedDamageHelpers);
-  Hooks.on("deleteChatMessage", handleDeletedMessage);
+  Hooks.on("deleteChatMessage", (message) => {
+    void refreshRelatedMessages(message);
+    const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+    if (link) queueAutomation(() => reconcileAutomatedSaveDamage(link));
+  });
   Hooks.on("renderChatMessageHTML", renderTargetHelper);
   Hooks.on("updateUser", (_user, changes) => {
     if (Object.hasOwn(changes, "active")) resumeTargetHelperAutomations();
@@ -115,17 +107,6 @@ function captureTargets(message, _data, _options, userId) {
   });
 }
 
-function handleCreatedMessage(message) {
-  void refreshRelatedMessages(message);
-  queueTargetHelperAutomation(message);
-}
-
-function handleDeletedMessage(message) {
-  void refreshRelatedMessages(message);
-  const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
-  if (link) queueAutomation(() => reconcileAutomatedSaveDamage(link));
-}
-
 function queueTargetHelperAutomation(message) {
   if (
     message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG)
@@ -147,7 +128,7 @@ function queueTargetHelperAutomation(message) {
 }
 
 function queueAutomation(task) {
-  automationQueue = automationQueue.then(task, task).catch((error) => {
+  automationQueue = automationQueue.then(task).catch((error) => {
     console.error(`${MODULE_ID} | Failed Target Helper automation`, error);
   });
 }
@@ -169,32 +150,32 @@ async function runTargetHelperAutomation(message) {
     !game.user.isActiveGM
     || !automation
     || ["complete", "failed", "manual"].includes(automation.status)
-    || automationLocks.has(message.id)
   ) {
     return;
   }
 
-  automationLocks.add(message.id);
   try {
     if (isSupportedDamageRoll(message)) {
       await applyAutomatedDamage(message, data);
-    } else if (automation.type === "attack") {
-      await automateAttack(message, data);
-    } else if (automation.type === "basic-save") {
-      await automateBasicSave(message, data);
+    } else if (["attack", "basic-save"].includes(automation.type)) {
+      await automateSource(message, data);
     }
   } catch (error) {
     await updateAutomationState(message, { status: "failed" });
     console.error(`${MODULE_ID} | Failed Target Helper automation`, error);
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
-  } finally {
-    automationLocks.delete(message.id);
   }
 }
 
-async function automateAttack(message, data) {
-  const target = resolveTarget(data.targets?.at(0));
-  if (!target?.actor || !target.object || !getAutomatedAttackTarget(message)) {
+async function automateSource(message, data) {
+  const type = data.automation.type;
+  const targets = type === "attack"
+    ? [resolveTarget(data.targets?.at(0))].filter((token) => token?.actor && token.object)
+    : data.targets?.map(resolveTarget).filter((token) => token?.actor) ?? [];
+  if (
+    !targets.length
+    || (type === "attack" ? !getAutomatedAttackTarget(message) : !isValidSave(data.save))
+  ) {
     await updateAutomationState(message, { status: "manual" });
     return;
   }
@@ -213,47 +194,21 @@ async function automateAttack(message, data) {
     return;
   }
 
-  await updateAutomationState(message, { status: "rolling-damage" });
-  const damageMessage = await rollAutomatedDamage(message, [target], "attack");
-  await updateAutomationState(message, damageMessage
-    ? { status: "rolling-damage", damageMessageId: damageMessage.id }
-    : { status: "manual" });
-}
-
-async function automateBasicSave(message, data) {
-  const targets = data.targets?.map(resolveTarget).filter((token) => token?.actor) ?? [];
-  if (!targets.length || !isValidSave(data.save)) {
-    await updateAutomationState(message, { status: "manual" });
-    return;
-  }
-
-  const existing = findAutomatedDamageMessage(message.id);
-  if (existing) {
-    await updateAutomationState(message, {
-      status: "rolling-damage",
-      damageMessageId: existing.id
-    });
-    await applyAutomatedDamage(existing, existing.getFlag(MODULE_ID, TARGET_HELPER_FLAG));
-    return;
-  }
-  if (data.automation.status === "rolling-damage") {
-    await updateAutomationState(message, { status: "manual" });
-    return;
-  }
-
-  await updateAutomationState(message, { status: "rolling-saves" });
-  for (const target of targets) {
-    const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-    if (resolveSaveResultMessage(message, target, current)) continue;
-    if (!await rollSave(message, target, current.save, null, true)) {
-      await updateAutomationState(message, { status: "failed" });
-      ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
-      return;
+  if (type === "basic-save") {
+    await updateAutomationState(message, { status: "rolling-saves" });
+    for (const target of targets) {
+      const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+      if (resolveSaveResultMessage(message, target, current)) continue;
+      if (!await rollSave(message, target, current.save, null, true)) {
+        await updateAutomationState(message, { status: "failed" });
+        ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
+        return;
+      }
     }
   }
 
   await updateAutomationState(message, { status: "rolling-damage" });
-  const damageMessage = await rollAutomatedDamage(message, targets, "basic-save");
+  const damageMessage = await rollAutomatedDamage(message, targets, type);
   await updateAutomationState(message, damageMessage
     ? { status: "rolling-damage", damageMessageId: damageMessage.id }
     : { status: "manual" });
@@ -278,68 +233,52 @@ async function rollAutomatedDamage(sourceMessage, targets, type) {
     damageMessage: null
   };
 
+  const previousTargets = [...game.user.targets];
+  game.user.targets.clear();
+  for (const token of targets) {
+    if (token.object) game.user.targets.add(token.object);
+  }
   pendingDamageAutomation = pending;
   try {
-    await withTemporaryTargets(targets, async () => {
-      if (type === "attack" && roll?.options?.action === "elemental-blast") {
-        const [element, damageType, meleeOrRanged, actionCost] = roll.options.identifier?.split(".") ?? [];
-        await new game.pf2e.ElementalBlast(sourceMessage.actor).damage({
-          element,
-          damageType,
-          melee: meleeOrRanged === "melee",
-          actionCost: Number(actionCost) || 1,
-          checkContext: context,
-          outcome: context.outcome,
-          event
-        });
-        return;
-      }
-
-      const attack = sourceMessage._attack;
-      if (type === "attack" && attack) {
-        const method = context.outcome === "criticalSuccess" ? "critical" : "damage";
-        await attack[method]?.({
-          event,
-          checkContext: context,
-          mapIncreases: context.mapIncreases,
-          target: target.object
-        });
-        return;
-      }
-
+    const attack = sourceMessage._attack;
+    if (type === "attack" && roll?.options?.action === "elemental-blast") {
+      const [element, damageType, meleeOrRanged, actionCost] = roll.options.identifier?.split(".") ?? [];
+      await new game.pf2e.ElementalBlast(sourceMessage.actor).damage({
+        element,
+        damageType,
+        melee: meleeOrRanged === "melee",
+        actionCost: Number(actionCost) || 1,
+        checkContext: context,
+        outcome: context.outcome,
+        event
+      });
+    } else if (type === "attack" && attack) {
+      const method = context.outcome === "criticalSuccess" ? "critical" : "damage";
+      await attack[method]?.({
+        event,
+        checkContext: context,
+        mapIncreases: context.mapIncreases,
+        target: target.object
+      });
+    } else {
       const spell = getSpellLikeItem(sourceMessage);
       if (spell) {
         pending.rollMultiplier = type === "attack" && context.outcome === "criticalSuccess" ? 2 : 1;
         await spell.rollDamage(event, context?.mapIncreases);
-        return;
-      }
-
-      if (type === "basic-save" && attack?.damage) {
+      } else if (type === "basic-save" && attack?.damage) {
         await attack.damage({ event, target: target.object });
       }
-    });
+    }
   } finally {
     pendingDamageAutomation = null;
+    game.user.targets.clear();
+    for (const token of previousTargets) game.user.targets.add(token);
   }
 
   const damageMessage = pending.damageMessage?.id
     ? game.messages.get(pending.damageMessage.id)
     : findAutomatedDamageMessage(sourceMessage.id);
   return damageMessage ?? null;
-}
-
-async function withTemporaryTargets(targets, callback) {
-  const previous = [...game.user.targets];
-  game.user.targets.clear();
-  for (const token of targets) {
-    if (token.object) game.user.targets.add(token.object);
-  }
-  try {
-    return await callback();
-  } finally {
-    game.user.targets.clear();
-    for (const token of previous) game.user.targets.add(token);
-  }
 }
 
 async function applyAutomatedDamage(message, data) {
@@ -358,7 +297,12 @@ async function applyAutomatedDamage(message, data) {
       complete = false;
       continue;
     }
-    if (hasDamageResult(message, target)) continue;
+    const existingResult = target.actor.isOfType("npc")
+      ? findDamageResultMessage(message.id, target.uuid)
+      : game.messages.get(
+        data.damageResults?.find((entry) => entry?.targetUuid === target.uuid)?.resultMessageId
+      );
+    if (existingResult) continue;
 
     const multiplier = automation.type === "attack"
       ? 1
@@ -375,15 +319,6 @@ async function applyAutomatedDamage(message, data) {
   if (!complete) {
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
   }
-}
-
-function hasDamageResult(message, target) {
-  if (target.actor.isOfType("npc")) {
-    return !!findDamageResultMessage(message.id, target.uuid);
-  }
-  const result = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.damageResults
-    ?.find((entry) => entry?.targetUuid === target.uuid);
-  return !!game.messages.get(result?.resultMessageId);
 }
 
 function findAutomatedDamageMessage(sourceMessageId) {
@@ -423,7 +358,7 @@ async function reconcileAutomatedSaveDamage(link) {
   const outcome = resultMessage?.visible
     ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)?.outcome
     : null;
-  const multiplier = BASIC_SAVE_MULTIPLIERS[outcome];
+  const multiplier = TARGET_HELPER_BASIC_SAVE_MULTIPLIERS[outcome];
   if (multiplier === undefined) return;
 
   const currentResult = target.actor.isOfType("npc")
@@ -447,71 +382,60 @@ async function reconcileAutomatedSaveDamage(link) {
 }
 
 function renderTargetHelper(message, html) {
-  const root = asHTMLElement(html);
-  if (!root) return;
+  if (!html) return;
 
   if (
     message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG)
     || message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)
   ) {
-    root.classList.add("daavy-addons-target-helper-storage");
+    html.classList.add("daavy-addons-target-helper-storage");
     return;
   }
   if (!canUseTargetHelper()) return;
 
   const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
   if (isSupportedDamageRoll(message)) {
-    renderDamageHelper(message, root, data);
+    renderTargetCard(message, html, data, true);
   } else if (isValidSave(data?.save)) {
-    renderSaveHelper(message, root, data);
+    renderTargetCard(message, html, data, false);
   }
 }
 
-function renderDamageHelper(message, root, data) {
-  const content = root.querySelector(".message-content");
-  const uuids = data?.targets;
-  content?.querySelectorAll(".damage-application").forEach((element) => element.remove());
-  if (!content || !Array.isArray(uuids) || !uuids.length || content.querySelector(".daavy-addons-target-helper")) {
-    return;
-  }
-
-  const targets = resolveVisibleTargets(uuids)
-    .filter((token) => game.user.isGM || !token.actor?.isOfType("npc"));
-  if (!targets.length) return;
-
-  const card = document.createElement("section");
-  card.className = "daavy-addons-target-helper";
-  card.append(document.createElement("hr"));
-  for (const target of targets) card.append(createDamageRow(message, target, data));
-  content.append(card);
-}
-
-function renderSaveHelper(message, root, data) {
+function renderTargetCard(message, root, data, damage) {
   const content = root.querySelector(".message-content");
   if (!content) return;
 
-  removeNativeSaveControl(content, data.save);
-  if (!Array.isArray(data.targets) || !data.targets.length || content.querySelector(".daavy-addons-target-helper")) {
+  if (damage) {
+    content.querySelectorAll(".damage-application").forEach((element) => element.remove());
+  } else {
+    removeNativeSaveControl(content, data.save);
+  }
+  if (
+    !Array.isArray(data?.targets)
+    || !data.targets.length
+    || content.querySelector(".daavy-addons-target-helper")
+  ) {
     return;
   }
 
-  const targets = resolveVisibleTargets(data.targets);
-  if (!targets.length) return;
-
-  const card = document.createElement("section");
-  card.className = "daavy-addons-target-helper";
-  card.append(document.createElement("hr"));
-  for (const target of targets) card.append(createSaveRow(message, target, data));
-  content.append(card);
-}
-
-function resolveVisibleTargets(uuids) {
-  return uuids
+  const targets = data.targets
     .map(resolveTarget)
     .filter((token) => (
       token?.documentName === "Token"
       && (game.user.isGM || !(token.hidden || token.actor?.hasCondition("unnoticed", "undetected")))
+      && (!damage || game.user.isGM || !token.actor?.isOfType("npc"))
     ));
+  if (!targets.length) return;
+
+  const card = document.createElement("section");
+  card.className = "daavy-addons-target-helper";
+  card.append(document.createElement("hr"));
+  for (const target of targets) {
+    card.append(damage
+      ? createDamageRow(message, target, data)
+      : createSaveRow(message, target, data));
+  }
+  content.append(card);
 }
 
 function createDamageRow(message, token, data) {
@@ -534,7 +458,7 @@ function createDamageRow(message, token, data) {
   const canApply = game.user.isGM || token.isOwner;
 
   actions.className = "daavy-addons-target-helper-actions";
-  for (const action of DAMAGE_ACTIONS) {
+  for (const action of TARGET_HELPER_DAMAGE_ACTIONS) {
     const button = document.createElement("button");
     const label = game.i18n.localize(`DAAVY_ADDONS.TargetHelper.Actions.${action.key}`);
 
@@ -574,15 +498,6 @@ function findDamageResultMessage(parentMessageId, targetUuid, excludedMessageId 
   }) ?? null;
 }
 
-async function refreshResultParent(message) {
-  const link = message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG)
-    ?? message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
-  const parent = game.messages.get(link?.parentMessageId);
-  if (parent && document.querySelector(`li.chat-message[data-message-id="${parent.id}"]`)) {
-    await ui.chat.updateMessage(parent);
-  }
-}
-
 async function refreshLinkedDamageHelpers(message) {
   const saveLink = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
   const sourceMessageId = saveLink?.parentMessageId
@@ -597,8 +512,13 @@ async function refreshLinkedDamageHelpers(message) {
 }
 
 async function refreshRelatedMessages(message) {
+  const link = message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG)
+    ?? message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+  const parent = game.messages.get(link?.parentMessageId);
   await Promise.all([
-    refreshResultParent(message),
+    parent && document.querySelector(`li.chat-message[data-message-id="${parent.id}"]`)
+      ? ui.chat.updateMessage(parent)
+      : undefined,
     refreshLinkedDamageHelpers(message)
   ]);
 }
@@ -638,7 +558,7 @@ function getRecommendedDamageMultiplier(message, token, data) {
   const outcome = resultMessage?.visible
     ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)?.outcome
     : null;
-  return BASIC_SAVE_MULTIPLIERS[outcome] ?? null;
+  return TARGET_HELPER_BASIC_SAVE_MULTIPLIERS[outcome] ?? null;
 }
 
 function createDamageResult(message, token, result) {
@@ -667,16 +587,7 @@ function createDamageResult(message, token, result) {
   button.title = game.i18n.localize("DAAVY_ADDONS.TargetHelper.UndoDamage");
   button.setAttribute("aria-label", button.title);
   button.disabled = !canUndo;
-  button.addEventListener("click", async (event) => {
-    event.stopPropagation();
-    button.disabled = true;
-    button.classList.add("pending");
-    const submitted = await undoDamage(message, token, result);
-    if (!submitted && button.isConnected) {
-      button.disabled = !canUndo;
-      button.classList.remove("pending");
-    }
-  });
+  bindPendingButton(button, () => undoDamage(message, token, result), !canUndo);
 
   const iwrInfo = createIwrInfo(resultMessage);
   container.append(...[iwrInfo, amount, button].filter(Boolean));
@@ -737,16 +648,7 @@ function createSaveRow(message, token, data) {
   button.title = game.i18n.localize("DAAVY_ADDONS.TargetHelper.RollSave");
   button.setAttribute("aria-label", button.title);
   button.disabled = !canRoll;
-  button.addEventListener("click", async (event) => {
-    event.stopPropagation();
-    button.disabled = true;
-    button.classList.add("pending");
-    const submitted = await rollSave(message, token, data.save, event);
-    if (!submitted && button.isConnected) {
-      button.disabled = false;
-      button.classList.remove("pending");
-    }
-  });
+  bindPendingButton(button, (event) => rollSave(message, token, data.save, event));
   row.append(button);
   return row;
 }
@@ -757,7 +659,10 @@ function createTargetRow(token) {
 
   row.className = "daavy-addons-target-helper-row";
   name.className = "daavy-addons-target-helper-name";
-  name.textContent = getVisibleName(token);
+  const namesVisible = !game.pf2e.settings.tokens.nameVisibility || token.playersCanSeeName;
+  name.textContent = game.user.isGM || token.isOwner || namesVisible
+    ? token.name
+    : game.i18n.localize("PF2E.Actor.ApplyDamage.TheTarget");
   name.title = name.textContent;
   bindNameInteractions(name, token);
   row.append(name);
@@ -827,17 +732,20 @@ function createHeroPointRerollButton(parentMessage, token, resultMessage) {
   button.innerHTML = '<i class="fa-solid fa-circle-h fa-fw" inert></i>';
   button.title = game.i18n.localize("PF2E.RerollMenu.HeroPoint");
   button.setAttribute("aria-label", button.title);
+  bindPendingButton(button, () => rerollSave(parentMessage, token, resultMessage));
+  return button;
+}
+
+function bindPendingButton(button, action, disabled = false) {
   button.addEventListener("click", async (event) => {
     event.stopPropagation();
     button.disabled = true;
     button.classList.add("pending");
-    const submitted = await rerollSave(parentMessage, token, resultMessage);
-    if (!submitted && button.isConnected) {
-      button.disabled = false;
+    if (!await action(event) && button.isConnected) {
+      button.disabled = disabled;
       button.classList.remove("pending");
     }
   });
-  return button;
 }
 
 function removeNativeSaveControl(content, save) {
@@ -901,29 +809,6 @@ function bindNameInteractions(element, token) {
     event.preventDefault();
     token.actor?.sheet.render(true);
   });
-}
-
-function getVisibleName(token) {
-  const namesVisible = !game.pf2e.settings.tokens.nameVisibility || token.playersCanSeeName;
-  return game.user.isGM || token.isOwner || namesVisible
-    ? token.name
-    : game.i18n.localize("PF2E.Actor.ApplyDamage.TheTarget");
-}
-
-function resolveTarget(uuid) {
-  try {
-    return typeof uuid === "string" ? fromUuidSync(uuid) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function resolveUuid(uuid) {
-  try {
-    return typeof uuid === "string" ? await fromUuid(uuid) : null;
-  } catch {
-    return null;
-  }
 }
 
 function canUseTargetHelper() {
@@ -1169,7 +1054,7 @@ async function rerollSave(parentMessage, token, resultMessage) {
     });
   };
 
-  Hooks.on("preCreateChatMessage", prepareReroll);
+  const removePrepareReroll = addPreCreateChatMessageHook(prepareReroll);
   try {
     await game.pf2e.Check.rerollFromMessage(resultMessage, { resource: "hero-points" });
     return !game.messages.has(resultMessage.id);
@@ -1178,7 +1063,7 @@ async function rerollSave(parentMessage, token, resultMessage) {
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.SaveError", { localize: true });
     return false;
   } finally {
-    Hooks.off("preCreateChatMessage", prepareReroll);
+    removePrepareReroll();
   }
 }
 
@@ -1319,7 +1204,7 @@ async function handleDamageResultSocket(payload, sender) {
     }
 
     if (target.actor.isOfType("npc")) {
-      if (!acceptPrivateDamageResult(parent.id, target.uuid, result.id)) {
+      if (findDamageResultMessage(parent.id, target.uuid, result.id)) {
         await rollbackDamageResult(target.actor, result);
       }
       return;
@@ -1342,10 +1227,6 @@ async function handleDamageResultSocket(payload, sender) {
     }
     console.error(`${MODULE_ID} | Failed to store Target Helper damage`, error);
   }
-}
-
-function acceptPrivateDamageResult(parentMessageId, targetUuid, resultMessageId) {
-  return !findDamageResultMessage(parentMessageId, targetUuid, resultMessageId);
 }
 
 async function handleDamageUndoSocket(payload, sender) {
@@ -1397,7 +1278,7 @@ function isLinkedDamageResult(message, target, link) {
     && Number.isFinite(link?.amount)
     && (
       link.multiplier === undefined
-      || DAMAGE_ACTIONS.some((action) => action.multiplier === link.multiplier)
+      || TARGET_HELPER_DAMAGE_ACTIONS.some((action) => action.multiplier === link.multiplier)
     )
     && link.amount === getAppliedDamageAmount(appliedDamage)
     && isValidAppliedDamage(appliedDamage, target)
@@ -1411,7 +1292,7 @@ function isValidAppliedDamage(appliedDamage, target) {
     && appliedDamage.isHealing === false
     && Array.isArray(appliedDamage.updates)
     && appliedDamage.updates.every((update) => (
-      DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
+      TARGET_HELPER_DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
     ))
     && Array.isArray(appliedDamage.persistent)
     && appliedDamage.persistent.every((id) => typeof id === "string")
@@ -1428,7 +1309,7 @@ function isValidAppliedDamage(appliedDamage, target) {
 function getAppliedDamageAmount(appliedDamage) {
   if (!Array.isArray(appliedDamage?.updates)) return 0;
   return Math.max(0, appliedDamage.updates.reduce(
-    (total, update) => total + (DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
+    (total, update) => total + (TARGET_HELPER_DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
       ? update.value
       : 0),
     0
@@ -1512,7 +1393,7 @@ async function applyDamage(message, token, multiplier) {
       return false;
     };
 
-    Hooks.on("preCreateChatMessage", captureDamageMessage);
+    const removeCaptureDamageMessage = addPreCreateChatMessageHook(captureDamageMessage);
     try {
       await contextClone.applyDamage({
         damage: roll.alter(multiplier, 0),
@@ -1523,7 +1404,7 @@ async function applyDamage(message, token, multiplier) {
         outcome: context?.outcome
       });
     } finally {
-      Hooks.off("preCreateChatMessage", captureDamageMessage);
+      removeCaptureDamageMessage();
     }
 
     if (!capturedSource) throw new Error("PF2e damage result message was not captured");
@@ -1531,20 +1412,16 @@ async function applyDamage(message, token, multiplier) {
     if (!resultMessage) throw new Error("PF2e damage result message was not stored");
 
     if (privateNpcResult && game.user.isActiveGM) {
-      submitted = acceptPrivateDamageResult(message.id, token.uuid, resultMessage.id);
-      if (!submitted) {
-        await rollbackDamageResult(token.actor, resultMessage);
-        return false;
-      }
+      submitted = !findDamageResultMessage(message.id, token.uuid, resultMessage.id);
     } else if (!privateNpcResult && message.canUserModify(game.user, "update")) {
       submitted = await appendResult(message, "damageResults", token.uuid, resultMessage.id);
-      if (!submitted) {
-        await rollbackDamageResult(token.actor, resultMessage);
-        return false;
-      }
     } else {
       emitTargetHelperRequest(TARGET_HELPER_DAMAGE_RESULT_FLAG, message, token, resultMessage);
       submitted = true;
+    }
+    if (!submitted) {
+      await rollbackDamageResult(token.actor, resultMessage);
+      return false;
     }
     return true;
   } catch (error) {

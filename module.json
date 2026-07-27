@@ -19,14 +19,6 @@
     "verified": "14",
     "maximum": "14"
   },
-  "relationships": {
-    "recommends": [
-      {
-        "id": "xdy-pf2e-workbench",
-        "type": "module"
-      }
-    ]
-  },
   "esmodules": [
     "scripts/main.js"
   ],
