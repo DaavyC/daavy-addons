@@ -262,6 +262,17 @@ button.daavy-addons-target-helper-hero-reroll {
   color: #000;
 }
 
+.dice-total:has(> button.daavy-addons-target-helper-strike-reroll) {
+  position: relative;
+}
+
+button.daavy-addons-target-helper-strike-reroll {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 button:is(
   .daavy-addons-target-helper-undo,
   .daavy-addons-target-helper-hero-reroll,

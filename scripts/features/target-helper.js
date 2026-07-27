@@ -39,7 +39,9 @@ export function registerTargetHelperHooks() {
         Object.hasOwn(changes, automationPath)
         || foundry.utils.hasProperty(changes, automationPath)
       )
-      && message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status === "pending"
+      && ["pending", "reroll-pending"].includes(
+        message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status
+      )
     ) {
       queueTargetHelperAutomation(message);
     }
@@ -88,6 +90,7 @@ function captureTargets(message, _data, _options, userId) {
             type: pending.type,
             sourceMessageId: pending.sourceMessageId,
             status: "pending",
+            ...(pending.outcome ? { outcome: pending.outcome } : {}),
             ...(pending.pendingTargets ? { pendingTargets: pending.pendingTargets } : {})
           }
         } : {})
@@ -151,7 +154,7 @@ function resumeTargetHelperAutomations() {
   if (!game?.user?.isActiveGM || !canUseTargetHelperAutomations()) return;
   for (const message of game.messages.contents) {
     const status = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status;
-    if (["pending", "rolling-saves", "rolling-damage", "applying"].includes(status)) {
+    if (["pending", "reroll-pending", "rolling-saves", "rolling-damage", "applying"].includes(status)) {
       queueTargetHelperAutomation(message);
     }
   }
@@ -169,7 +172,9 @@ async function runTargetHelperAutomation(message) {
   }
 
   try {
-    if (isSupportedDamageRoll(message)) {
+    if (automation.status === "reroll-pending") {
+      await reconcileAutomatedAttackReroll(message, data);
+    } else if (isSupportedDamageRoll(message)) {
       await applyAutomatedDamage(message, data);
     } else if (["attack", "basic-save"].includes(automation.type)) {
       await automateSource(message, data);
@@ -194,7 +199,7 @@ async function automateSource(message, data) {
     : targets;
   if (
     !targets.length
-    || (type === "attack" ? !getAutomatedAttackTarget(message) : !isValidSave(data.save))
+    || (type === "attack" ? !getAutomatedAttackTarget(message, true) : !isValidSave(data.save))
   ) {
     await updateAutomationState(message, { status: "manual" });
     return;
@@ -309,6 +314,7 @@ async function rollAutomatedDamage(sourceMessage, targets, type, pendingTargets 
     type,
     sourceMessageId: sourceMessage.id,
     targets: targets.map((token) => token.uuid),
+    outcome: context?.outcome,
     pendingTargets,
     rollMultiplier: 1,
     damageMessage: null
@@ -396,7 +402,7 @@ async function applyAutomatedDamage(message, data) {
     status,
     damageMessageId: message.id,
     pendingTargets: null
-  }, false);
+  }, automation.type === "attack");
   if (!complete) {
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
   }
@@ -457,8 +463,96 @@ async function reconcileAutomatedSaveDamage(link) {
   }
 }
 
+async function reconcileAutomatedAttackReroll(message, data) {
+  const automation = data?.automation;
+  const context = message.flags?.pf2e?.context;
+  const target = message.target?.token;
+  const author = message.author;
+  if (
+    automation?.type !== "attack"
+    || typeof automation.previousSourceMessageId !== "string"
+    || context?.type !== "attack-roll"
+    || context.isReroll !== true
+    || !context.options?.includes("check:reroll:hero-points")
+    || message._attack?.type !== "strike"
+    || target?.uuid !== data.targets?.at(0)
+    || !author
+    || !(author.isGM || message.actor?.testUserPermission(author, "OWNER"))
+    || !TARGET_HELPER_SAVE_OUTCOMES.includes(context.outcome)
+  ) {
+    await updateAutomationState(message, { status: "manual" });
+    return;
+  }
+
+  const previousDamage = findAutomatedDamageMessage(automation.previousSourceMessageId);
+  const previousData = previousDamage?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  const previousOutcome = previousData?.automation?.outcome ?? automation.previousOutcome;
+  if (
+    !previousDamage
+    && ["success", "criticalSuccess"].includes(previousOutcome)
+    && automation.previousAutomationStatus === "complete"
+  ) {
+    await updateAutomationState(message, { status: "manual" });
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
+    return;
+  }
+  if (previousDamage && previousOutcome === context.outcome) {
+    await previousDamage.update({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: {
+        ...previousData.automation,
+        sourceMessageId: message.id,
+        status: "complete"
+      }
+    }, { render: false });
+    await message.update({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: {
+        type: "attack",
+        status: "complete",
+        damageMessageId: previousDamage.id
+      }
+    });
+    return;
+  }
+
+  let reverted = true;
+  for (const result of [...(previousData?.damageResults ?? [])].reverse()) {
+    const resultTarget = resolveTarget(result?.targetUuid);
+    try {
+      if (
+        !resultTarget?.actor
+        || !isValidDamageResult(result, resultTarget)
+        || !await finalizeDamageUndo(previousDamage, resultTarget, result, false)
+      ) {
+        reverted = false;
+      }
+    } catch (error) {
+      reverted = false;
+      console.error(`${MODULE_ID} | Failed to revert Target Helper Strike reroll damage`, error);
+    }
+  }
+  if (!reverted) {
+    if (previousDamage) await updateAutomationState(previousDamage, { status: "failed" });
+    await updateAutomationState(message, { status: "failed" });
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.UndoError", { localize: true });
+    return;
+  }
+
+  if (previousDamage) await previousDamage.delete();
+  const hit = ["success", "criticalSuccess"].includes(context.outcome);
+  await message.update({
+    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: {
+      type: "attack",
+      status: hit ? "pending" : "complete"
+    }
+  });
+}
+
 function renderTargetHelper(message, html) {
   if (!html) return;
+  if (message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.temporary === true) {
+    html.hidden = true;
+    return;
+  }
 
   if (message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)) {
     html.classList.add("daavy-addons-target-helper-storage");
@@ -466,12 +560,43 @@ function renderTargetHelper(message, html) {
   }
   if (!canUseTargetHelper()) return;
 
+  renderStrikeHeroPointReroll(message, html);
   const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
   if (isSupportedDamageRoll(message)) {
     renderTargetCard(message, html, data, true);
   } else if (isValidSave(data?.save)) {
     renderTargetCard(message, html, data, false);
   }
+}
+
+function renderStrikeHeroPointReroll(message, root) {
+  const actor = message.actor;
+  const context = message.flags?.pf2e?.context;
+  const target = message.target?.token;
+  const total = root.querySelector(".dice-total");
+  const automationStatus = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status;
+  const canReroll = (
+    canUseTargetHelperAutomations()
+    && message._attack?.type === "strike"
+    && context?.type === "attack-roll"
+    && context.damaging === true
+    && context.isReroll !== true
+    && target?.actor
+    && actor?.isOfType("character")
+    && actor.heroPoints.value > 0
+    && message.rolls.at(0)?.isRerollable === true
+    && (game.user.isGM || (actor.isOwner && message.isAuthor))
+    && (!automationStatus || ["complete", "failed", "manual"].includes(automationStatus))
+  );
+  if (!canReroll || !total || total.querySelector(".daavy-addons-target-helper-strike-reroll")) return;
+
+  const button = createIconButton(
+    "daavy-addons-target-helper-hero-reroll daavy-addons-target-helper-strike-reroll",
+    '<i class="fa-solid fa-circle-h fa-fw" inert></i>',
+    game.i18n.localize("PF2E.RerollMenu.HeroPoint")
+  );
+  bindPendingButton(button, () => rerollStrike(message, target));
+  total.append(button);
 }
 
 function renderTargetCard(message, root, data, damage) {
@@ -965,13 +1090,13 @@ function canUseTargetHelperAutomations() {
   return canUseTargetHelper() && getSetting(SETTINGS.TARGET_HELPER_AUTOMATIONS) === true;
 }
 
-function getAutomatedAttackTarget(message) {
+function getAutomatedAttackTarget(message, includeReroll = false) {
   const context = message?.flags?.pf2e?.context;
   return (
     message?.isCheckRoll === true
     && context?.type === "attack-roll"
     && context?.damaging === true
-    && context?.isReroll !== true
+    && (includeReroll || context?.isReroll !== true)
     && ["success", "criticalSuccess"].includes(context.outcome)
   )
     ? message.target?.token ?? null
@@ -1169,6 +1294,95 @@ async function rollSave(message, token, save, event, options = {}) {
     console.error(`${MODULE_ID} | Failed to roll Target Helper save`, error);
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.SaveError", { localize: true });
     return false;
+  }
+}
+
+async function rerollStrike(message, target) {
+  const actor = message.actor;
+  const context = message.flags?.pf2e?.context;
+  const targetHelper = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  if (!game.users.activeGM) {
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.NoActiveGM", { localize: true });
+    return false;
+  }
+  if (
+    message._attack?.type !== "strike"
+    || context?.type !== "attack-roll"
+    || context.isReroll === true
+    || target?.uuid !== message.target?.token?.uuid
+    || !actor?.isOfType("character")
+    || actor.heroPoints.value < 1
+    || message.rolls.at(0)?.isRerollable !== true
+    || !(game.user.isGM || (actor.isOwner && message.isAuthor))
+  ) {
+    return false;
+  }
+
+  let createdReroll = null;
+  const preserveMessage = (deletedMessage, _options, userId) => {
+    if (userId === game.user.id && deletedMessage.id === message.id) return false;
+  };
+  const isExpectedReroll = (rerollMessage, userId) => {
+    const rerollContext = rerollMessage.flags?.pf2e?.context;
+    return (
+      userId === game.user.id
+      && rerollContext?.type === "attack-roll"
+      && rerollContext.isReroll === true
+      && rerollContext.options?.includes("check:reroll:hero-points")
+      && rerollContext.target?.actor === context.target?.actor
+      && rerollContext.origin?.actor === context.origin?.actor
+      && rerollContext.identifier === context.identifier
+      && rerollMessage.flags?.pf2e?.modifierName === message.flags?.pf2e?.modifierName
+      && TARGET_HELPER_SAVE_OUTCOMES.includes(rerollContext.outcome)
+    );
+  };
+  const prepareReroll = (rerollMessage, _data, options, userId) => {
+    if (!isExpectedReroll(rerollMessage, userId)) return;
+    rerollMessage.updateSource({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.temporary`]: true
+    });
+    options.render = false;
+  };
+  const captureReroll = (rerollMessage, _options, userId) => {
+    if (isExpectedReroll(rerollMessage, userId)) createdReroll = rerollMessage;
+  };
+
+  Hooks.on("preDeleteChatMessage", preserveMessage);
+  Hooks.on("createChatMessage", captureReroll);
+  const removePrepareReroll = addPreCreateChatMessageHook(prepareReroll);
+  try {
+    await game.pf2e.Check.rerollFromMessage(message, { resource: "hero-points" });
+    const rerollMessage = createdReroll;
+    if (!rerollMessage) throw new Error("PF2e Strike reroll message was not captured");
+
+    const source = rerollMessage.toObject();
+    await message.update({
+      content: source.content,
+      flavor: source.flavor,
+      rolls: source.rolls,
+      "flags.pf2e": source.flags.pf2e,
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
+        ...targetHelper,
+        targets: [target.uuid],
+        automation: {
+          type: "attack",
+          status: "reroll-pending",
+          previousSourceMessageId: message.id,
+          previousOutcome: context.outcome,
+          previousAutomationStatus: targetHelper?.automation?.status ?? null
+        }
+      }
+    });
+    await rerollMessage.delete({ render: false });
+    return true;
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to reroll Target Helper Strike`, error);
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
+    return false;
+  } finally {
+    Hooks.off("preDeleteChatMessage", preserveMessage);
+    Hooks.off("createChatMessage", captureReroll);
+    removePrepareReroll();
   }
 }
 
