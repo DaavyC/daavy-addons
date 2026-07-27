@@ -161,6 +161,11 @@ button.daavy-addons-target-helper-action {
   line-height: 1;
 }
 
+button.daavy-addons-target-helper-action.recommended {
+  outline: 2px solid var(--color-warm-2);
+  outline-offset: -2px;
+}
+
 button.daavy-addons-target-helper-action.half > i {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -264,19 +269,19 @@ button.daavy-addons-target-helper-undo:disabled {
 }
 
 .daavy-addons-target-helper-save-result.criticalFailure {
-  color: #d63c3c;
+  color: var(--color-pf-text-critical-failure);
 }
 
 .daavy-addons-target-helper-save-result.failure {
-  color: #df7a2d;
+  color: var(--color-pf-text-failure);
 }
 
 .daavy-addons-target-helper-save-result.success {
-  color: #59a83f;
+  color: var(--color-pf-text-success);
 }
 
 .daavy-addons-target-helper-save-result.criticalSuccess {
-  color: #20a6b3;
+  color: var(--color-pf-text-critical-success);
 }
 
 .daavy-addons-target-helper-save-result.hidden-result {

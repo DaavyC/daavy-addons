@@ -25,11 +25,18 @@ const DAMAGE_ACTIONS = [
   { key: "Double", icon: '<img src="systems/pf2e/icons/damage/double.svg" alt="">', multiplier: 2 },
   { key: "Block", icon: '<i class="fa-solid fa-shield-blank fa-fw" inert></i>', multiplier: 0 }
 ];
+const BASIC_SAVE_MULTIPLIERS = {
+  criticalFailure: 2,
+  failure: 1,
+  success: 0.5,
+  criticalSuccess: 0
+};
 
 export function registerTargetHelperHooks() {
   Hooks.on("preCreateChatMessage", captureTargets);
   Hooks.on("createChatMessage", refreshDamageParent);
-  Hooks.on("deleteChatMessage", refreshDamageParent);
+  Hooks.on("updateChatMessage", refreshLinkedDamageHelpers);
+  Hooks.on("deleteChatMessage", refreshRelatedMessages);
   Hooks.on("renderChatMessageHTML", renderTargetHelper);
   Hooks.once("ready", () => game.socket.on(TARGET_HELPER_SOCKET, handleTargetHelperSocket));
 }
@@ -39,10 +46,12 @@ function captureTargets(message, _data, _options, userId) {
 
   const targets = Array.from(game.user.targets, (token) => token.document?.uuid).filter(Boolean);
   if (isSupportedDamageRoll(message)) {
+    const saveMessage = findBasicSaveMessage(message);
     message.updateSource({
       [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
         targets,
-        damageResults: []
+        damageResults: [],
+        ...(saveMessage ? { saveMessageId: saveMessage.id } : {})
       }
     });
     return;
@@ -130,6 +139,7 @@ function resolveVisibleTargets(uuids) {
 
 function createDamageRow(message, token, data) {
   const row = createTargetRow(token);
+  const recommendedMultiplier = getRecommendedDamageMultiplier(message, token, data);
   const privateResult = game.user.isGM && token.actor?.isOfType("npc")
     ? findDamageResultMessage(message.id, token.uuid)
     : null;
@@ -153,6 +163,7 @@ function createDamageRow(message, token, data) {
 
     button.type = "button";
     button.className = `daavy-addons-target-helper-action ${action.key.toLowerCase()}`;
+    button.classList.toggle("recommended", action.multiplier === recommendedMultiplier);
     button.innerHTML = action.icon;
     button.title = label;
     button.setAttribute("aria-label", label);
@@ -192,6 +203,65 @@ async function refreshDamageParent(message) {
   if (parent && document.querySelector(`li.chat-message[data-message-id="${parent.id}"]`)) {
     await ui.chat.updateMessage(parent);
   }
+}
+
+async function refreshLinkedDamageHelpers(message) {
+  const saveLink = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+  const sourceMessageId = saveLink?.parentMessageId
+    ?? (isValidSave(message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.save) ? message.id : null);
+  if (!sourceMessageId) return;
+
+  const messages = game.messages.contents.filter((candidate) => (
+    candidate.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.saveMessageId === sourceMessageId
+    && document.querySelector(`li.chat-message[data-message-id="${candidate.id}"]`)
+  ));
+  await Promise.all(messages.map((candidate) => ui.chat.updateMessage(candidate)));
+}
+
+async function refreshRelatedMessages(message) {
+  await Promise.all([
+    refreshDamageParent(message),
+    refreshLinkedDamageHelpers(message)
+  ]);
+}
+
+function findBasicSaveMessage(damageMessage) {
+  if (damageMessage.flags?.pf2e?.context?.sourceType !== "save") return null;
+
+  const itemUuid = damageMessage.item?.uuid;
+  const originUuid = damageMessage.actor?.uuid;
+  if (!itemUuid || !originUuid) return null;
+
+  return game.messages.contents.findLast((message) => {
+    const save = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.save;
+    return (
+      isValidSave(save)
+      && save.options.includes("damaging-effect")
+      && save.itemUuid === itemUuid
+      && save.originUuid === originUuid
+    );
+  }) ?? null;
+}
+
+function getRecommendedDamageMultiplier(message, token, data) {
+  if (message.flags?.pf2e?.context?.sourceType === "attack") return 1;
+
+  const saveMessage = game.messages.get(data?.saveMessageId);
+  const saveData = saveMessage?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  if (
+    !isValidSave(saveData?.save)
+    || !saveData.save.options.includes("damaging-effect")
+    || !saveData.targets?.includes(token.uuid)
+  ) {
+    return null;
+  }
+
+  const result = saveData.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
+  const resultMessage = game.messages.get(result?.resultMessageId);
+  const outcome = resultMessage?.visible
+    ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)?.outcome
+    : null;
+  return BASIC_SAVE_MULTIPLIERS[outcome] ?? null;
 }
 
 function createDamageResult(message, token, result) {
