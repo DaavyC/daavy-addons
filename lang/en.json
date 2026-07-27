@@ -3,6 +3,7 @@
     "Settings": {
       "Groups": {
         "Features": "Features",
+        "TargetHelper": "Target Helper",
         "ReachControl": "Reach Control"
       },
       "Sections": {
@@ -12,7 +13,11 @@
       },
       "TargetHelper": {
         "Name": "Target Helper",
-        "Hint": "Add manual target damage and saving throw controls to Pathfinder 2e chat cards."
+        "Hint": "Add target damage and saving throw controls to Pathfinder 2e chat cards.",
+        "Automations": {
+          "Name": "Automations",
+          "Hint": "Automatically roll supported damage and basic saves, then apply damage to targets. Requires an active GM."
+        }
       },
       "ReachControl": {
         "Name": "Reach Control",
@@ -70,8 +75,9 @@
       "UndoError": "Unable to revert damage for this target.",
       "RollSave": "Roll Save",
       "HiddenResult": "Result Hidden",
-      "NoActiveGM": "An active GM is required to store this result.",
-      "SaveError": "Unable to roll this target's saving throw."
+      "NoActiveGM": "An active GM is required for this action.",
+      "SaveError": "Unable to roll this target's saving throw.",
+      "AutomationError": "Target Helper automation could not be completed. Manual controls remain available."
     },
     "ReachControl": {
       "Placeables": {

@@ -10,14 +10,15 @@ This module includes standalone features and integrations that do not require de
 
 ## 🗂️ Features
 
-- **🎯 Target Helper Automations (PF2e)** — Rolls saves, rolls damage, and applies damage automatically for supported Target Helper chat cards.
+- **🎯 Target Helper (PF2e)** — Adds manual target controls with optional save, damage roll, and damage application automations.
 - **🖐️ Reach Control** — Limits door, Stairways, and token interactions by distance in grid squares.
 
 ---
 
 ## ⚙️ Settings
 
-- **Target Helper Automations** — Enables or disables this automation feature.
+- **Target Helper** — Enables target controls.
+- **Target Helper → Automations** — Enables automatic rolls and damage application. Requires an active GM.
 - **Reach Control** — Enables range limits and per-placeable integrations.
 
 ---
@@ -26,7 +27,7 @@ This module includes standalone features and integrations that do not require de
 
 - **Foundry VTT**: Version 14
 - **Systems**: System-agnostic for Reach Control; PF2e for Target Helper Automations
-- **Optional modules**: PF2e Toolbelt, PF2e Workbench, and Stairways
+- **Optional modules**: PF2e Workbench and Stairways
 
 ---
 

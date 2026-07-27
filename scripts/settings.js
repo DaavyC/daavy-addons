@@ -10,6 +10,10 @@ const SETTING_DEFINITIONS = {
     label: "TargetHelper",
     defaultValue: false
   },
+  [SETTINGS.TARGET_HELPER_AUTOMATIONS]: {
+    label: "TargetHelper.Automations",
+    defaultValue: false
+  },
   [SETTINGS.REACH_CONTROL]: { label: "ReachControl", defaultValue: false },
   [SETTINGS.REACH_DOORS]: { label: "ReachControl.Doors.Enabled", defaultValue: true },
   [SETTINGS.REACH_DOOR_RANGE]: { label: "ReachControl.Doors.Range", defaultValue: 1 },
@@ -45,7 +49,9 @@ export function registerSettings() {
       name: `DAAVY_ADDONS.Settings.${label}.Name`,
       hint: `DAAVY_ADDONS.Settings.${label}.Hint`,
       scope: "world",
-      config: key === SETTINGS.TARGET_HELPER ? game.system.id === "pf2e" : config,
+      config: [SETTINGS.TARGET_HELPER, SETTINGS.TARGET_HELPER_AUTOMATIONS].includes(key)
+        ? game.system.id === "pf2e"
+        : config,
       type,
       default: defaultValue,
       ...(type === Number ? { range: REACH_RANGE } : {})
@@ -74,6 +80,14 @@ export function organizeSettingsConfig(html) {
   const featuresGroup = createGroup(documentRef, "Features");
   featureRows[0].replaceWith(featuresGroup);
   appendRows(featuresGroup, featureRows);
+
+  const automationRow = findSettingRow(container, SETTINGS.TARGET_HELPER_AUTOMATIONS);
+  if (automationRow) {
+    const targetHelperGroup = createGroup(documentRef, "TargetHelper");
+    appendRows(targetHelperGroup, [automationRow]);
+    featuresGroup.after(targetHelperGroup);
+    configureVisibility(container, SETTINGS.TARGET_HELPER, [targetHelperGroup]);
+  }
 
   const sectionRows = Object.fromEntries(
     Object.entries(REACH_SECTIONS).map(([section, keys]) => [
