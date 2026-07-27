@@ -12,7 +12,7 @@
       },
       "TargetHelper": {
         "Name": "Target Helper",
-        "Hint": "Add manual target damage controls to Pathfinder 2e damage rolls."
+        "Hint": "Add manual target damage and saving throw controls to Pathfinder 2e chat cards."
       },
       "ReachControl": {
         "Name": "Reach Control",
@@ -64,7 +64,14 @@
         "Double": "Apply double damage",
         "Block": "Apply zero damage"
       },
-      "ApplyError": "Unable to apply damage to this target."
+      "ApplyError": "Unable to apply damage to this target.",
+      "DamageResultError": "Unable to store this damage result. Applied damage was reverted.",
+      "UndoDamage": "Revert damage",
+      "UndoError": "Unable to revert damage for this target.",
+      "RollSave": "Roll Save",
+      "HiddenResult": "Result Hidden",
+      "NoActiveGM": "An active GM is required to store this result.",
+      "SaveError": "Unable to roll this target's saving throw."
     },
     "ReachControl": {
       "Placeables": {

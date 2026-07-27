@@ -88,72 +88,77 @@ button.daavy-addons-feedback-action:hover {
 }
 
 .daavy-addons-target-helper {
-  border-top: 1px solid var(--color-border-light-tertiary, rgba(127, 127, 127, 0.35));
-  margin-top: 6px;
-  padding-top: 4px;
+  margin-top: 3px;
+}
+
+.daavy-addons-target-helper > hr {
+  margin: 0 0 2px;
+}
+
+.daavy-addons-target-helper-storage {
+  display: none !important;
 }
 
 .daavy-addons-target-helper-row {
   align-items: center;
   display: flex;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .daavy-addons-target-helper-row + .daavy-addons-target-helper-row {
-  margin-top: 3px;
+  margin-top: 1px;
 }
 
-button.daavy-addons-target-helper-name {
+.daavy-addons-target-helper-name {
   align-items: center;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
   color: inherit;
+  cursor: pointer;
   display: flex;
   flex: 1;
   font: inherit;
-  height: 28px;
+  font-weight: bold;
+  height: 24px;
   justify-content: flex-start;
-  margin: 0;
   min-width: 0;
   overflow: hidden;
-  outline: none;
-  padding: 0 4px;
+  padding: 0 2px;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-button.daavy-addons-target-helper-name:is(:hover, :focus, :active) {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  outline: none;
-}
-
-button.daavy-addons-target-helper-name:is(:hover, :focus-visible) {
-  text-shadow: 0 0 4px var(--color-shadow-primary, #ff6400);
-}
-
 .daavy-addons-target-helper-actions {
   display: flex;
-  gap: 3px;
+  gap: 1px;
+}
+
+.daavy-addons-target-helper-actions.pending,
+button.daavy-addons-target-helper-save.pending,
+button.daavy-addons-target-helper-undo.pending {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+button.daavy-addons-target-helper-action,
+button.daavy-addons-target-helper-save {
+  box-sizing: border-box;
+  height: 24px;
+  margin: 0;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0;
+  width: 24px;
 }
 
 button.daavy-addons-target-helper-action {
   align-items: center;
   display: inline-flex;
-  flex: 0 0 28px;
+  flex: 0 0 24px;
   font-size: var(--font-size-12, 12px);
   font-weight: bold;
-  height: 28px;
   justify-content: center;
   line-height: 1;
-  margin: 0;
-  min-width: 28px;
-  padding: 0;
-  width: 28px;
 }
 
 button.daavy-addons-target-helper-action.half > i {
@@ -172,4 +177,108 @@ button.daavy-addons-target-helper-action > img {
 button.daavy-addons-target-helper-action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+button.daavy-addons-target-helper-save {
+  flex: 0 0 auto;
+  font-size: inherit;
+}
+
+.daavy-addons-target-helper-damage-result {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1px;
+}
+
+.daavy-addons-target-helper-damage-result .iwr {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  cursor: help;
+  display: inline-flex;
+  line-height: 1;
+  outline: 0;
+  padding: 0;
+}
+
+.daavy-addons-target-helper-damage-result .iwr > i {
+  margin: 0;
+}
+
+.daavy-addons-target-helper-damage-amount {
+  border-right: 2px groove white;
+  font-size: inherit;
+  padding: 0 var(--space-4) 0 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+button.daavy-addons-target-helper-undo {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: inherit;
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  min-height: 0;
+  min-width: 0;
+  padding: 0 2px;
+  width: auto;
+}
+
+button.daavy-addons-target-helper-undo:is(:hover, :focus, :active) {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+button.daavy-addons-target-helper-undo:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: -2px;
+}
+
+button.daavy-addons-target-helper-undo:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.daavy-addons-target-helper-save-result {
+  flex: 0 0 auto;
+  font-size: inherit;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.daavy-addons-target-helper-save-label {
+  border-right: 2px groove white;
+  padding: 0 var(--space-4) 0 0;
+}
+
+.daavy-addons-target-helper-save-result.criticalFailure {
+  color: #d63c3c;
+}
+
+.daavy-addons-target-helper-save-result.failure {
+  color: #df7a2d;
+}
+
+.daavy-addons-target-helper-save-result.success {
+  color: #59a83f;
+}
+
+.daavy-addons-target-helper-save-result.criticalSuccess {
+  color: #20a6b3;
+}
+
+.daavy-addons-target-helper-save-result.hidden-result {
+  color: var(--color-text-subtle, #999);
 }

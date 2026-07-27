@@ -1,10 +1,25 @@
-import { MODULE_ID, SETTINGS, TARGET_HELPER_FLAG } from "../constants.js";
+import {
+  MODULE_ID,
+  SETTINGS,
+  TARGET_HELPER_DAMAGE_RESULT_FLAG,
+  TARGET_HELPER_DAMAGE_UNDO_REQUEST,
+  TARGET_HELPER_FLAG,
+  TARGET_HELPER_SAVE_OUTCOMES,
+  TARGET_HELPER_SAVE_RESULT_FLAG,
+  TARGET_HELPER_SAVE_TYPES,
+  TARGET_HELPER_SOCKET
+} from "../constants.js";
 import { asHTMLElement } from "../dom.js";
 import { getSetting } from "../settings.js";
 
 const LONG_PRESS_DELAY = 500;
 const SINGLE_CLICK_DELAY = 250;
-const ACTIONS = [
+const DAMAGE_UPDATE_PATHS = new Set([
+  "system.attributes.hp.temp",
+  "system.attributes.hp.sp.value",
+  "system.attributes.hp.value"
+]);
+const DAMAGE_ACTIONS = [
   { key: "Damage", icon: '<i class="fa-solid fa-heart-crack fa-fw" inert></i>', multiplier: 1 },
   { key: "Half", icon: '<i class="fa-solid fa-heart-crack fa-fw" inert></i>', multiplier: 0.5 },
   { key: "Double", icon: '<img src="systems/pf2e/icons/damage/double.svg" alt="">', multiplier: 2 },
@@ -13,56 +28,126 @@ const ACTIONS = [
 
 export function registerTargetHelperHooks() {
   Hooks.on("preCreateChatMessage", captureTargets);
+  Hooks.on("createChatMessage", refreshDamageParent);
+  Hooks.on("deleteChatMessage", refreshDamageParent);
   Hooks.on("renderChatMessageHTML", renderTargetHelper);
+  Hooks.once("ready", () => game.socket.on(TARGET_HELPER_SOCKET, handleTargetHelperSocket));
 }
 
 function captureTargets(message, _data, _options, userId) {
-  if (userId !== game.user.id || !canUseTargetHelper() || !isSupportedDamageRoll(message)) return;
+  if (userId !== game.user.id || !canUseTargetHelper()) return;
 
   const targets = Array.from(game.user.targets, (token) => token.document?.uuid).filter(Boolean);
+  if (isSupportedDamageRoll(message)) {
+    message.updateSource({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
+        targets,
+        damageResults: []
+      }
+    });
+    return;
+  }
+
+  const save = getStructuredSave(message);
+  if (!save) return;
+
   message.updateSource({
-    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.targets`]: targets
+    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
+      targets,
+      save,
+      saveResults: []
+    }
   });
 }
 
 function renderTargetHelper(message, html) {
-  if (!canUseTargetHelper() || !isSupportedDamageRoll(message)) return;
-
   const root = asHTMLElement(html);
-  const content = root?.querySelector(".message-content");
-  const uuids = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.targets;
+  if (!root) return;
+
+  if (
+    message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG)
+    || message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)
+  ) {
+    root.classList.add("daavy-addons-target-helper-storage");
+    return;
+  }
+  if (!canUseTargetHelper()) return;
+
+  const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  if (isSupportedDamageRoll(message)) {
+    renderDamageHelper(message, root, data);
+  } else if (isValidSave(data?.save)) {
+    renderSaveHelper(message, root, data);
+  }
+}
+
+function renderDamageHelper(message, root, data) {
+  const content = root.querySelector(".message-content");
+  const uuids = data?.targets;
   content?.querySelectorAll(".damage-application").forEach((element) => element.remove());
   if (!content || !Array.isArray(uuids) || !uuids.length || content.querySelector(".daavy-addons-target-helper")) {
     return;
   }
 
-  const targets = uuids
-    .map(resolveTarget)
-    .filter((token) => token?.documentName === "Token" && (game.user.isGM || !isHidden(token)));
+  const targets = resolveVisibleTargets(uuids)
+    .filter((token) => game.user.isGM || !token.actor?.isOfType("npc"));
   if (!targets.length) return;
 
   const card = document.createElement("section");
   card.className = "daavy-addons-target-helper";
-
-  for (const target of targets) card.append(createTargetRow(message, target));
+  card.append(document.createElement("hr"));
+  for (const target of targets) card.append(createDamageRow(message, target, data));
   content.append(card);
 }
 
-function createTargetRow(message, token) {
-  const row = document.createElement("div");
-  const name = document.createElement("button");
+function renderSaveHelper(message, root, data) {
+  const content = root.querySelector(".message-content");
+  if (!content) return;
+
+  removeNativeSaveControl(content, data.save);
+  if (!Array.isArray(data.targets) || !data.targets.length || content.querySelector(".daavy-addons-target-helper")) {
+    return;
+  }
+
+  const targets = resolveVisibleTargets(data.targets);
+  if (!targets.length) return;
+
+  const card = document.createElement("section");
+  card.className = "daavy-addons-target-helper";
+  card.append(document.createElement("hr"));
+  for (const target of targets) card.append(createSaveRow(message, target, data));
+  content.append(card);
+}
+
+function resolveVisibleTargets(uuids) {
+  return uuids
+    .map(resolveTarget)
+    .filter((token) => (
+      token?.documentName === "Token"
+      && (game.user.isGM || !(token.hidden || token.actor?.hasCondition("unnoticed", "undetected")))
+    ));
+}
+
+function createDamageRow(message, token, data) {
+  const row = createTargetRow(token);
+  const privateResult = game.user.isGM && token.actor?.isOfType("npc")
+    ? findDamageResultMessage(message.id, token.uuid)
+    : null;
+  const result = privateResult
+    ? { targetUuid: token.uuid, resultMessageId: privateResult.id }
+    : token.actor?.isOfType("npc")
+      ? null
+      : data?.damageResults?.find((entry) => entry?.targetUuid === token.uuid);
+  if (result) {
+    row.append(createDamageResult(message, token, result));
+    return row;
+  }
+
   const actions = document.createElement("div");
   const canApply = game.user.isGM || token.isOwner;
 
-  row.className = "daavy-addons-target-helper-row";
-  name.type = "button";
-  name.className = "daavy-addons-target-helper-name";
-  name.textContent = getVisibleName(token);
-  name.title = name.textContent;
   actions.className = "daavy-addons-target-helper-actions";
-  bindNameInteractions(name, token);
-
-  for (const action of ACTIONS) {
+  for (const action of DAMAGE_ACTIONS) {
     const button = document.createElement("button");
     const label = game.i18n.localize(`DAAVY_ADDONS.TargetHelper.Actions.${action.key}`);
 
@@ -72,15 +157,206 @@ function createTargetRow(message, token) {
     button.title = label;
     button.setAttribute("aria-label", label);
     button.disabled = !canApply;
-    button.addEventListener("click", (event) => {
+    button.addEventListener("click", async (event) => {
       event.stopPropagation();
-      void applyDamage(message, token, action.multiplier);
+      for (const actionButton of actions.querySelectorAll("button")) actionButton.disabled = true;
+      actions.classList.add("pending");
+      const submitted = await applyDamage(message, token, action.multiplier);
+      if (!submitted && actions.isConnected) {
+        for (const actionButton of actions.querySelectorAll("button")) actionButton.disabled = !canApply;
+        actions.classList.remove("pending");
+      }
     });
     actions.append(button);
   }
 
-  row.append(name, actions);
+  row.append(actions);
   return row;
+}
+
+function findDamageResultMessage(parentMessageId, targetUuid, excludedMessageId = null) {
+  return game.messages.contents.find((message) => {
+    if (message.id === excludedMessageId) return false;
+    const link = message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG);
+    return (
+      link?.parentMessageId === parentMessageId
+      && link?.targetUuid === targetUuid
+      && message.flags?.pf2e?.appliedDamage?.isReverted !== true
+    );
+  }) ?? null;
+}
+
+async function refreshDamageParent(message) {
+  const link = message.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG);
+  const parent = game.messages.get(link?.parentMessageId);
+  if (parent && document.querySelector(`li.chat-message[data-message-id="${parent.id}"]`)) {
+    await ui.chat.updateMessage(parent);
+  }
+}
+
+function createDamageResult(message, token, result) {
+  const container = document.createElement("div");
+  const amount = document.createElement("span");
+  const button = document.createElement("button");
+  const resultMessage = game.messages.get(result.resultMessageId);
+  const resultData = resultMessage?.visible
+    ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG)
+    : null;
+  const canUndo = (
+    !!resultData
+    && resultMessage?.flags?.pf2e?.appliedDamage?.isReverted !== true
+    && (game.user.isGM || token.isOwner)
+  );
+
+  container.className = "daavy-addons-target-helper-damage-result";
+  amount.className = "daavy-addons-target-helper-damage-amount";
+  amount.textContent = Number.isFinite(resultData?.amount)
+    ? resultData.amount
+    : game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
+
+  button.type = "button";
+  button.className = "daavy-addons-target-helper-undo";
+  button.innerHTML = '<i class="fa-solid fa-rotate-left fa-fw" inert></i>';
+  button.title = game.i18n.localize("DAAVY_ADDONS.TargetHelper.UndoDamage");
+  button.setAttribute("aria-label", button.title);
+  button.disabled = !canUndo;
+  button.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    button.disabled = true;
+    button.classList.add("pending");
+    const submitted = await undoDamage(message, token, result);
+    if (!submitted && button.isConnected) {
+      button.disabled = !canUndo;
+      button.classList.remove("pending");
+    }
+  });
+
+  const iwrInfo = createIwrInfo(resultMessage);
+  container.append(...[iwrInfo, amount, button].filter(Boolean));
+  return container;
+}
+
+function createIwrInfo(resultMessage) {
+  if (!resultMessage?.visible) return null;
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = resultMessage.content ?? "";
+  const source = wrapper.querySelector(".damage-taken .iwr");
+  if (!source || (source.dataset.visibility === "gm" && !game.user.isGM)) return null;
+
+  let applications;
+  try {
+    applications = JSON.parse(source.dataset.applications ?? "null");
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(applications) || !applications.every((application) => (
+    application
+    && typeof application.category === "string"
+    && typeof application.type === "string"
+    && Number.isFinite(application.adjustment)
+  ))) {
+    return null;
+  }
+
+  const info = source.cloneNode(true);
+  void foundry.applications.handlebars
+    .renderTemplate("systems/pf2e/templates/chat/damage/iwr-breakdown.hbs", { applications })
+    .then((html) => {
+      info.dataset.tooltipClass = "pf2e";
+      info.dataset.tooltipHtml = html;
+    })
+    .catch((error) => {
+      console.error(`${MODULE_ID} | Failed to render Target Helper IWR tooltip`, error);
+    });
+  return info;
+}
+
+function createSaveRow(message, token, data) {
+  const row = createTargetRow(token);
+  const result = data.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
+  if (result) {
+    row.append(createSaveResult(result));
+    return row;
+  }
+
+  const button = document.createElement("button");
+  const canRoll = (game.user.isGM || token.isOwner) && !!token.actor?.getStatistic(data.save.statistic);
+
+  button.type = "button";
+  button.className = "daavy-addons-target-helper-save";
+  button.innerHTML = '<i class="fa-solid fa-dice-d20 fa-fw" inert></i>';
+  button.title = game.i18n.localize("DAAVY_ADDONS.TargetHelper.RollSave");
+  button.setAttribute("aria-label", button.title);
+  button.disabled = !canRoll;
+  button.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    button.disabled = true;
+    button.classList.add("pending");
+    const submitted = await rollSave(message, token, data.save, event);
+    if (!submitted && button.isConnected) {
+      button.disabled = false;
+      button.classList.remove("pending");
+    }
+  });
+  row.append(button);
+  return row;
+}
+
+function createTargetRow(token) {
+  const row = document.createElement("div");
+  const name = document.createElement("span");
+
+  row.className = "daavy-addons-target-helper-row";
+  name.className = "daavy-addons-target-helper-name";
+  name.textContent = getVisibleName(token);
+  name.title = name.textContent;
+  bindNameInteractions(name, token);
+  row.append(name);
+  return row;
+}
+
+function createSaveResult(result) {
+  const element = document.createElement("span");
+  const resultMessage = game.messages.get(result.resultMessageId);
+  const resultData = resultMessage?.visible
+    ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)
+    : null;
+  const outcome = resultData?.outcome;
+  const total = resultMessage?.rolls.at(0)?.total;
+
+  element.className = "daavy-addons-target-helper-save-result";
+  if (TARGET_HELPER_SAVE_OUTCOMES.includes(outcome) && Number.isFinite(total)) {
+    const label = document.createElement("span");
+    const value = document.createElement("span");
+
+    element.classList.add(outcome);
+    label.className = "daavy-addons-target-helper-save-label";
+    label.textContent = game.i18n.localize(`PF2E.Check.Result.Degree.Check.${outcome}`);
+    value.textContent = total;
+    element.append(label, " ", value);
+  } else {
+    element.classList.add("hidden-result");
+    element.textContent = game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
+  }
+  return element;
+}
+
+function removeNativeSaveControl(content, save) {
+  const action = content.querySelector(
+    '[data-action="spell-save"], [data-action="roll-area-save"]'
+  );
+  if (action) {
+    action.remove();
+    return;
+  }
+
+  const control = [...content.querySelectorAll("[data-pf2-check]")]
+    .find((element) => (
+      element.dataset.pf2Check === save.statistic
+      && Number(element.dataset.pf2Dc) + (Number(element.dataset.pf2Adjustment) || 0) === save.dc
+    ));
+  control?.remove();
 }
 
 function bindNameInteractions(element, token) {
@@ -100,7 +376,9 @@ function bindNameInteractions(element, token) {
     cancelPress();
     pressTimer = window.setTimeout(() => {
       longPressed = true;
-      pingToken(token, event.shiftKey);
+      if (canvas.ready && token.parent === canvas.scene) {
+        void canvas.ping(token.center, { pull: event.shiftKey && game.user.isGM });
+      }
     }, LONG_PRESS_DELAY);
   });
   element.addEventListener("pointerup", cancelPress);
@@ -116,23 +394,15 @@ function bindNameInteractions(element, token) {
     if (event.detail > 1) return;
 
     window.clearTimeout(clickTimer);
-    clickTimer = window.setTimeout(() => panToToken(token), SINGLE_CLICK_DELAY);
+    clickTimer = window.setTimeout(() => {
+      if (canvas.ready && token.parent === canvas.scene) canvas.animatePan(token.center);
+    }, SINGLE_CLICK_DELAY);
   });
   element.addEventListener("dblclick", (event) => {
     window.clearTimeout(clickTimer);
     event.preventDefault();
     token.actor?.sheet.render(true);
   });
-}
-
-function panToToken(token) {
-  if (canvas.ready && token.parent === canvas.scene) canvas.animatePan(token.center);
-}
-
-function pingToken(token, pull) {
-  if (canvas.ready && token.parent === canvas.scene) {
-    void canvas.ping(token.center, { pull: pull && game.user.isGM });
-  }
 }
 
 function getVisibleName(token) {
@@ -142,13 +412,17 @@ function getVisibleName(token) {
     : game.i18n.localize("PF2E.Actor.ApplyDamage.TheTarget");
 }
 
-function isHidden(token) {
-  return token.hidden || !!token.actor?.hasCondition("unnoticed", "undetected");
-}
-
 function resolveTarget(uuid) {
   try {
     return typeof uuid === "string" ? fromUuidSync(uuid) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveUuid(uuid) {
+  try {
+    return typeof uuid === "string" ? await fromUuid(uuid) : null;
   } catch {
     return null;
   }
@@ -162,10 +436,439 @@ function isSupportedDamageRoll(message) {
   return message?.isDamageRoll === true && message.rolls.at(0)?.options.evaluatePersistent !== true;
 }
 
+function getStructuredSave(message) {
+  if (message?.isDamageRoll || message?.isCheckRoll || message?.rolls?.length) return null;
+
+  const spell = getSpellLikeItem(message);
+  const spellSave = spell?.system?.defense?.save;
+  const spellDC = spell?.spellcasting?.statistic?.dc?.value;
+  if (isSaveType(spellSave?.statistic) && Number.isFinite(spellDC)) {
+    return createSaveData({
+      statistic: spellSave.statistic,
+      dc: spellDC,
+      item: message.item,
+      origin: message.actor,
+      options: spellSave.basic ? ["damaging-effect"] : []
+    });
+  }
+
+  const context = message.flags?.pf2e?.context;
+  const areaDC = Number(context?.dc?.value ?? context?.dc);
+  if (["area-fire", "auto-fire"].includes(context?.type) && Number.isFinite(areaDC)) {
+    return createSaveData({
+      statistic: "reflex",
+      dc: areaDC,
+      item: message.item,
+      origin: message.actor,
+      options: context.options
+    });
+  }
+
+  return getInlineSave(message);
+}
+
+function getSpellLikeItem(message) {
+  const item = message?.item;
+  if (!item) return null;
+  if (item.isOfType?.("spell")) return item;
+  return item.isOfType?.("consumable") ? item.embeddedSpell : null;
+}
+
+function getInlineSave(message) {
+  const container = document.createElement("div");
+  container.innerHTML = message.content ?? "";
+
+  for (const link of container.querySelectorAll("[data-pf2-check]")) {
+    const statistic = link.dataset.pf2Check;
+    const dc = Number(link.dataset.pf2Dc) + (Number(link.dataset.pf2Adjustment) || 0);
+    if (!isSaveType(statistic) || !Number.isFinite(dc)) continue;
+
+    return createSaveData({
+      statistic,
+      dc,
+      itemUuid: link.dataset.itemUuid,
+      origin: message.actor,
+      options: getInlineOptions(link.dataset.pf2RollOptions, link.dataset.pf2Traits)
+    });
+  }
+
+  for (const match of (message.content ?? "").matchAll(/@Check\[([^\]]+)\]/g)) {
+    const parts = match[1].split("|").map((part) => part.trim());
+    const statistic = parts[0];
+    const params = Object.fromEntries(parts.slice(1).map((part) => {
+      const separator = part.indexOf(":");
+      return separator < 0 ? [part, true] : [part.slice(0, separator), part.slice(separator + 1)];
+    }));
+    const dc = Number(params.dc) + (Number(params.adjustment) || 0);
+    if (!isSaveType(statistic) || !Number.isFinite(dc)) continue;
+
+    return createSaveData({
+      statistic,
+      dc,
+      item: message.item,
+      origin: message.actor,
+      options: getInlineOptions(
+        [params.basic === true ? "damaging-effect" : null, params.options].filter(Boolean).join(","),
+        params.traits
+      )
+    });
+  }
+
+  return null;
+}
+
+function createSaveData({ statistic, dc, item, itemUuid, origin, options }) {
+  const values = Array.isArray(options) || options instanceof Set ? [...options] : [];
+  return {
+    statistic,
+    dc: Number(dc),
+    itemUuid: itemUuid ?? item?.uuid ?? null,
+    originUuid: origin?.uuid ?? item?.actor?.uuid ?? null,
+    options: [...new Set(values.filter((option) => typeof option === "string" && option))]
+  };
+}
+
+function getInlineOptions(rollOptions, traitsValue) {
+  const traits = splitOptions(traitsValue);
+  return [
+    ...splitOptions(rollOptions),
+    ...traits,
+    ...traits.filter((trait) => trait in CONFIG.PF2E.actionTraits).map((trait) => `item:trait:${trait}`)
+  ];
+}
+
+function splitOptions(value) {
+  return typeof value === "string"
+    ? value.split(",").map((option) => option.trim()).filter(Boolean)
+    : [];
+}
+
+function isSaveType(value) {
+  return typeof value === "string" && TARGET_HELPER_SAVE_TYPES.has(value);
+}
+
+function isValidSave(save) {
+  return (
+    save
+    && isSaveType(save.statistic)
+    && Number.isFinite(save.dc)
+    && Array.isArray(save.options)
+  );
+}
+
+async function rollSave(message, token, save, event) {
+  if (!message.canUserModify(game.user, "update") && !game.users.activeGM) {
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.NoActiveGM", { localize: true });
+    return false;
+  }
+
+  const statistic = token.actor?.getStatistic(save.statistic);
+  if (!statistic || !(game.user.isGM || token.isOwner)) return false;
+
+  try {
+    const item = await resolveUuid(save.itemUuid) ?? getSpellLikeItem(message) ?? message.item;
+    const origin = await resolveUuid(save.originUuid) ?? message.actor;
+    let rollData = null;
+
+    await statistic.check.roll({
+      dc: { value: save.dc },
+      item,
+      origin,
+      token,
+      extraRollOptions: save.options,
+      skipDialog: event.shiftKey
+        ? game.user.settings.showCheckDialogs
+        : !game.user.settings.showCheckDialogs,
+      messageMode: event.ctrlKey || event.metaKey
+        ? game.user.isGM ? "gm" : "blind"
+        : undefined,
+      createMessage: false,
+      callback: (_roll, outcome, rollMessage) => {
+        rollData = { outcome, rollMessage };
+      }
+    });
+    if (!rollData || !TARGET_HELPER_SAVE_OUTCOMES.includes(rollData.outcome)) return false;
+
+    const resultMessage = await createSaveResultMessage(message, token, rollData);
+    if (!resultMessage) return false;
+
+    if (message.canUserModify(game.user, "update")) {
+      const stored = await appendResult(message, "saveResults", token.uuid, resultMessage.id);
+      if (!stored) await resultMessage.delete();
+    } else {
+      emitTargetHelperRequest(TARGET_HELPER_SAVE_RESULT_FLAG, message, token, resultMessage);
+    }
+    return true;
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to roll Target Helper save`, error);
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.SaveError", { localize: true });
+    return false;
+  }
+}
+
+async function createSaveResultMessage(parentMessage, token, { outcome, rollMessage }) {
+  const source = rollMessage.toObject();
+  delete source._id;
+  source.sound = null;
+  foundry.utils.setProperty(source, `flags.${MODULE_ID}.${TARGET_HELPER_SAVE_RESULT_FLAG}`, {
+    parentMessageId: parentMessage.id,
+    targetUuid: token.uuid,
+    outcome
+  });
+  return getDocumentClass("ChatMessage").create(source);
+}
+
+async function appendResult(message, resultKey, targetUuid, resultMessageId) {
+  const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  const results = Array.isArray(data?.[resultKey]) ? data[resultKey] : [];
+  if (results.some((result) => result?.targetUuid === targetUuid)) return false;
+
+  await message.update({
+    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.${resultKey}`]: [
+      ...results,
+      { targetUuid, resultMessageId }
+    ]
+  });
+  return true;
+}
+
+function emitTargetHelperRequest(type, message, token, resultMessage) {
+  game.socket.emit(TARGET_HELPER_SOCKET, {
+    type,
+    parentMessageId: message.id,
+    targetUuid: token.uuid,
+    resultMessageId: resultMessage.id
+  });
+}
+
+async function handleTargetHelperSocket(payload, userId) {
+  if (!game.user.isActiveGM) return;
+
+  const sender = game.users.get(userId);
+  if (!sender) return;
+
+  if (payload?.type === TARGET_HELPER_SAVE_RESULT_FLAG) {
+    await handleSaveResultSocket(payload, sender);
+  } else if (payload?.type === TARGET_HELPER_DAMAGE_RESULT_FLAG) {
+    await handleDamageResultSocket(payload, sender);
+  } else if (payload?.type === TARGET_HELPER_DAMAGE_UNDO_REQUEST) {
+    await handleDamageUndoSocket(payload, sender);
+  }
+}
+
+async function handleSaveResultSocket(payload, sender) {
+  try {
+    const parent = game.messages.get(payload.parentMessageId);
+    const result = game.messages.get(payload.resultMessageId);
+    const target = resolveTarget(payload.targetUuid);
+    const link = result?.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+    const data = parent?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+    const author = result?.author;
+    const valid = (
+      parent
+      && result
+      && target?.actor
+      && author
+      && author === sender
+      && isValidSave(data?.save)
+      && data.targets?.includes(payload.targetUuid)
+      && link?.parentMessageId === parent.id
+      && link?.targetUuid === payload.targetUuid
+      && TARGET_HELPER_SAVE_OUTCOMES.includes(link?.outcome)
+      && Number.isFinite(result.rolls.at(0)?.total)
+      && isLinkedSaveResult(result, target, data.save, link)
+      && (author.isGM || target.actor.testUserPermission(author, "OWNER"))
+    );
+    if (!valid) {
+      if (
+        result
+        && link?.parentMessageId === payload.parentMessageId
+        && link?.targetUuid === payload.targetUuid
+      ) {
+        await result.delete();
+      }
+      return;
+    }
+
+    const stored = await appendResult(parent, "saveResults", payload.targetUuid, result.id);
+    if (!stored) await result.delete();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to store Target Helper save`, error);
+  }
+}
+
+async function handleDamageResultSocket(payload, sender) {
+  let result = null;
+  let target = null;
+  try {
+    const parent = game.messages.get(payload.parentMessageId);
+    result = game.messages.get(payload.resultMessageId);
+    target = resolveTarget(payload.targetUuid);
+    const link = result?.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG);
+    const data = parent?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+    const authenticated = (
+      result
+      && target?.actor
+      && result.author === sender
+      && (sender.isGM || target.actor.testUserPermission(sender, "OWNER"))
+      && link?.parentMessageId === payload.parentMessageId
+      && link?.targetUuid === payload.targetUuid
+      && isLinkedDamageResult(result, target, link)
+    );
+    const valid = (
+      authenticated
+      && parent
+      && data?.targets?.includes(payload.targetUuid)
+    );
+
+    if (!valid) {
+      if (authenticated) await rollbackDamageResult(target.actor, result);
+      else if (
+        result?.author === sender
+        && link?.parentMessageId === payload.parentMessageId
+        && link?.targetUuid === payload.targetUuid
+      ) {
+        await result.delete();
+      }
+      return;
+    }
+
+    if (target.actor.isOfType("npc")) {
+      if (!acceptPrivateDamageResult(parent.id, target.uuid, result.id)) {
+        await rollbackDamageResult(target.actor, result);
+      }
+      return;
+    }
+
+    const stored = await appendResult(parent, "damageResults", payload.targetUuid, result.id);
+    if (!stored) await rollbackDamageResult(target.actor, result);
+  } catch (error) {
+    if (
+      result
+      && target?.actor
+      && result.author === sender
+      && (sender.isGM || target.actor.testUserPermission(sender, "OWNER"))
+    ) {
+      try {
+        await rollbackDamageResult(target.actor, result);
+      } catch (rollbackError) {
+        console.error(`${MODULE_ID} | Failed to roll back Target Helper damage`, rollbackError);
+      }
+    }
+    console.error(`${MODULE_ID} | Failed to store Target Helper damage`, error);
+  }
+}
+
+function acceptPrivateDamageResult(parentMessageId, targetUuid, resultMessageId) {
+  return !findDamageResultMessage(parentMessageId, targetUuid, resultMessageId);
+}
+
+async function handleDamageUndoSocket(payload, sender) {
+  try {
+    const parent = game.messages.get(payload.parentMessageId);
+    const result = game.messages.get(payload.resultMessageId);
+    const target = resolveTarget(payload.targetUuid);
+    const link = result?.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG);
+    const data = parent?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+    const stored = data?.damageResults?.some((entry) => (
+      entry?.targetUuid === payload.targetUuid
+      && entry?.resultMessageId === payload.resultMessageId
+    ));
+    const valid = (
+      parent
+      && result
+      && target?.actor
+      && stored
+      && (sender.isGM || target.actor.testUserPermission(sender, "OWNER"))
+      && link?.parentMessageId === parent.id
+      && link?.targetUuid === payload.targetUuid
+      && isLinkedDamageResult(result, target, link)
+    );
+    if (!valid) return;
+
+    await finalizeDamageUndo(parent, target, result);
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to undo Target Helper damage`, error);
+  }
+}
+
+function isLinkedSaveResult(message, target, save, link) {
+  const context = message.flags?.pf2e?.context;
+  return (
+    context?.type === "saving-throw"
+    && context.target?.actor === target.actor.uuid
+    && context.dc?.value === save.dc
+    && context.outcome === link.outcome
+    && context.isReroll !== true
+    && message.flags?.pf2e?.modifierName === save.statistic
+  );
+}
+
+function isLinkedDamageResult(message, target, link) {
+  const appliedDamage = message.flags?.pf2e?.appliedDamage ?? null;
+  return (
+    message.flags?.pf2e?.context?.type === "damage-taken"
+    && message.flags?.pf2e?.appliedDamage?.isReverted !== true
+    && Number.isFinite(link?.amount)
+    && link.amount === getAppliedDamageAmount(appliedDamage)
+    && isValidAppliedDamage(appliedDamage, target)
+  );
+}
+
+function isValidAppliedDamage(appliedDamage, target) {
+  if (appliedDamage === null) return true;
+  return (
+    appliedDamage?.uuid === target.actor.uuid
+    && appliedDamage.isHealing === false
+    && Array.isArray(appliedDamage.updates)
+    && appliedDamage.updates.every((update) => (
+      DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
+    ))
+    && Array.isArray(appliedDamage.persistent)
+    && appliedDamage.persistent.every((id) => typeof id === "string")
+    && (
+      appliedDamage.shield === null
+      || (
+        typeof appliedDamage.shield?.id === "string"
+        && Number.isFinite(appliedDamage.shield?.damage)
+      )
+    )
+  );
+}
+
+function getAppliedDamageAmount(appliedDamage) {
+  if (!Array.isArray(appliedDamage?.updates)) return 0;
+  return Math.max(0, appliedDamage.updates.reduce(
+    (total, update) => total + (DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
+      ? update.value
+      : 0),
+    0
+  ));
+}
+
 async function applyDamage(message, token, multiplier) {
   const roll = message.rolls.at(0);
-  if (!token.actor || typeof roll?.alter !== "function") return;
+  if (!token.actor || typeof roll?.alter !== "function") return false;
+  const privateNpcResult = token.actor.isOfType("npc");
+  if (
+    (
+      privateNpcResult
+      && !game.user.isActiveGM
+      && !game.users.activeGM
+    )
+    || (
+      !privateNpcResult
+      && !message.canUserModify(game.user, "update")
+      && !game.users.activeGM
+    )
+  ) {
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.NoActiveGM", { localize: true });
+    return false;
+  }
 
+  let capturedSource = null;
+  let resultMessage = null;
+  let submitted = false;
   try {
     const context = message.flags.pf2e.context;
     const messageRollOptions = [...(context?.options ?? [])];
@@ -202,18 +905,159 @@ async function applyDamage(message, token, multiplier) {
       ...contextClone.getSelfRollOptions()
     ]);
 
-    await contextClone.applyDamage({
-      damage: roll.alter(multiplier, 0),
-      token,
-      item,
-      skipIWR: multiplier === 0,
-      rollOptions,
-      outcome: context?.outcome
-    });
+    const captureDamageMessage = (created) => {
+      const appliedDamage = created.flags?.pf2e?.appliedDamage;
+      const speaker = created.speaker;
+      const targetMatches = (
+        appliedDamage?.uuid === token.actor.uuid
+        || (
+          !appliedDamage
+          && speaker?.actor === token.actor.id
+          && speaker?.token === token.id
+          && speaker?.scene === token.parent.id
+        )
+      );
+      if (created.flags?.pf2e?.context?.type !== "damage-taken" || !targetMatches) return;
+
+      capturedSource = created.toObject();
+      return false;
+    };
+
+    Hooks.on("preCreateChatMessage", captureDamageMessage);
+    try {
+      await contextClone.applyDamage({
+        damage: roll.alter(multiplier, 0),
+        token,
+        item,
+        skipIWR: multiplier === 0,
+        rollOptions,
+        outcome: context?.outcome
+      });
+    } finally {
+      Hooks.off("preCreateChatMessage", captureDamageMessage);
+    }
+
+    if (!capturedSource) throw new Error("PF2e damage result message was not captured");
+    resultMessage = await createDamageResultMessage(message, token, capturedSource);
+    if (!resultMessage) throw new Error("PF2e damage result message was not stored");
+
+    if (privateNpcResult && game.user.isActiveGM) {
+      submitted = acceptPrivateDamageResult(message.id, token.uuid, resultMessage.id);
+      if (!submitted) {
+        await rollbackDamageResult(token.actor, resultMessage);
+        return false;
+      }
+    } else if (!privateNpcResult && message.canUserModify(game.user, "update")) {
+      submitted = await appendResult(message, "damageResults", token.uuid, resultMessage.id);
+      if (!submitted) {
+        await rollbackDamageResult(token.actor, resultMessage);
+        return false;
+      }
+    } else {
+      emitTargetHelperRequest(TARGET_HELPER_DAMAGE_RESULT_FLAG, message, token, resultMessage);
+      submitted = true;
+    }
+    return true;
   } catch (error) {
+    if (!submitted) {
+      if (resultMessage) await rollbackDamageResult(token.actor, resultMessage);
+      else if (capturedSource?.flags?.pf2e?.appliedDamage) {
+        await token.actor.undoDamage(capturedSource.flags.pf2e.appliedDamage);
+      }
+    }
     console.error(`${MODULE_ID} | Failed to apply Target Helper damage`, error);
-    ui.notifications.error("DAAVY_ADDONS.TargetHelper.ApplyError", { localize: true });
+    ui.notifications.error(
+      capturedSource
+        ? "DAAVY_ADDONS.TargetHelper.DamageResultError"
+        : "DAAVY_ADDONS.TargetHelper.ApplyError",
+      { localize: true }
+    );
+    return false;
   }
+}
+
+async function createDamageResultMessage(parentMessage, token, source) {
+  delete source._id;
+  source.sound = null;
+  if (token.actor.isOfType("npc")) {
+    source.whisper = getDocumentClass("ChatMessage")
+      .getWhisperRecipients("GM")
+      .map((user) => user.id);
+  }
+  const appliedDamage = source.flags?.pf2e?.appliedDamage ?? null;
+  foundry.utils.setProperty(source, `flags.${MODULE_ID}.${TARGET_HELPER_DAMAGE_RESULT_FLAG}`, {
+    parentMessageId: parentMessage.id,
+    targetUuid: token.uuid,
+    amount: getAppliedDamageAmount(appliedDamage)
+  });
+  return getDocumentClass("ChatMessage").create(source);
+}
+
+async function rollbackDamageResult(actor, resultMessage) {
+  const appliedDamage = resultMessage.flags?.pf2e?.appliedDamage ?? null;
+  if (appliedDamage && appliedDamage.isReverted !== true) {
+    await actor.undoDamage(appliedDamage);
+    await resultMessage.update({
+      "flags.pf2e.appliedDamage.isReverted": true
+    });
+  }
+  await resultMessage.delete();
+}
+
+async function undoDamage(message, token, result) {
+  if (!message.canUserModify(game.user, "update") && !game.users.activeGM) {
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.NoActiveGM", { localize: true });
+    return false;
+  }
+
+  const resultMessage = game.messages.get(result.resultMessageId);
+  const link = resultMessage?.getFlag(MODULE_ID, TARGET_HELPER_DAMAGE_RESULT_FLAG);
+  if (
+    !resultMessage
+    || !(game.user.isGM || token.isOwner)
+    || link?.parentMessageId !== message.id
+    || link?.targetUuid !== token.uuid
+    || !isLinkedDamageResult(resultMessage, token, link)
+  ) {
+    return false;
+  }
+
+  try {
+    if (message.canUserModify(game.user, "update")) {
+      return await finalizeDamageUndo(message, token, resultMessage);
+    }
+
+    emitTargetHelperRequest(TARGET_HELPER_DAMAGE_UNDO_REQUEST, message, token, resultMessage);
+    return true;
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to undo Target Helper damage`, error);
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.UndoError", { localize: true });
+    return false;
+  }
+}
+
+async function finalizeDamageUndo(parentMessage, token, resultMessage) {
+  const appliedDamage = resultMessage.flags?.pf2e?.appliedDamage ?? null;
+  if (appliedDamage) {
+    await token.actor.undoDamage(appliedDamage);
+    await resultMessage.update({
+      "flags.pf2e.appliedDamage.isReverted": true
+    });
+  }
+
+  if (!token.actor.isOfType("npc")) {
+    const data = parentMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+    const results = Array.isArray(data?.damageResults) ? data.damageResults : [];
+    const remaining = results.filter((result) => (
+      result?.targetUuid !== token.uuid || result?.resultMessageId !== resultMessage.id
+    ));
+    if (remaining.length === results.length) return false;
+    await parentMessage.update({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.damageResults`]: remaining
+    });
+  }
+  await resultMessage.delete();
+  return true;
 }
 
 async function extractEphemeralEffects({ origin, target, item, domains, options }) {
