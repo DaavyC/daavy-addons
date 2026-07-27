@@ -4,11 +4,12 @@ import {
   SETTINGS
 } from "./constants.js";
 import { asHTMLElement } from "./dom.js";
-import { isTargetHelperAutomationsAvailable } from "./features/target-helper/settings.js";
 
 const SETTING_DEFINITIONS = {
-  [SETTINGS.TARGET_HELPER_AUTOMATIONS]: { label: "TargetHelperAutomations", defaultValue: false },
-  [SETTINGS.TARGET_HELPER_NPCS_ONLY]: { label: "TargetHelperAutomations.NpcsOnly", defaultValue: false },
+  [SETTINGS.TARGET_HELPER]: {
+    label: "TargetHelper",
+    defaultValue: false
+  },
   [SETTINGS.REACH_CONTROL]: { label: "ReachControl", defaultValue: false },
   [SETTINGS.REACH_DOORS]: { label: "ReachControl.Doors.Enabled", defaultValue: true },
   [SETTINGS.REACH_DOOR_RANGE]: { label: "ReachControl.Doors.Range", defaultValue: 1 },
@@ -38,13 +39,13 @@ const REACH_SECTIONS = {
 };
 
 export function registerSettings() {
-  for (const [key, { label, defaultValue }] of Object.entries(SETTING_DEFINITIONS)) {
+  for (const [key, { label, defaultValue, config = true }] of Object.entries(SETTING_DEFINITIONS)) {
     const type = typeof defaultValue === "boolean" ? Boolean : Number;
     game.settings.register(MODULE_ID, key, {
       name: `DAAVY_ADDONS.Settings.${label}.Name`,
       hint: `DAAVY_ADDONS.Settings.${label}.Hint`,
       scope: "world",
-      config: true,
+      config: key === SETTINGS.TARGET_HELPER ? game.system.id === "pf2e" : config,
       type,
       default: defaultValue,
       ...(type === Number ? { range: REACH_RANGE } : {})
@@ -65,7 +66,7 @@ export function organizeSettingsConfig(html) {
   if (!container || container.querySelector('[data-settings-group="Features"]')) return;
 
   const documentRef = container.ownerDocument ?? document;
-  const featureRows = [SETTINGS.TARGET_HELPER_AUTOMATIONS, SETTINGS.REACH_CONTROL]
+  const featureRows = [SETTINGS.TARGET_HELPER, SETTINGS.REACH_CONTROL]
     .map((key) => findSettingRow(container, key))
     .filter(Boolean);
   if (!featureRows.length) return;
@@ -73,15 +74,6 @@ export function organizeSettingsConfig(html) {
   const featuresGroup = createGroup(documentRef, "Features");
   featureRows[0].replaceWith(featuresGroup);
   appendRows(featuresGroup, featureRows);
-  configureTargetHelperAvailability(container);
-
-  const targetHelperRow = findSettingRow(container, SETTINGS.TARGET_HELPER_NPCS_ONLY);
-  if (targetHelperRow) {
-    const targetHelperGroup = createGroup(documentRef, "TargetHelperAutomations");
-    targetHelperRow.replaceWith(targetHelperGroup);
-    appendRows(targetHelperGroup, [targetHelperRow]);
-    configureVisibility(container, SETTINGS.TARGET_HELPER_AUTOMATIONS, [targetHelperGroup]);
-  }
 
   const sectionRows = Object.fromEntries(
     Object.entries(REACH_SECTIONS).map(([section, keys]) => [
@@ -148,25 +140,6 @@ function appendRows(target, rows) {
     row.classList.add("daavy-addons-settings-row");
     target.appendChild(row);
   }
-}
-
-function configureTargetHelperAvailability(container) {
-  const row = findSettingRow(container, SETTINGS.TARGET_HELPER_AUTOMATIONS);
-  const toggle = row?.querySelector('input[type="checkbox"]');
-  if (!toggle) return;
-
-  const available = isTargetHelperAutomationsAvailable();
-  toggle.disabled = !available;
-  if (!available) toggle.checked = false;
-  if (available) return;
-
-  const hint = row.querySelector(".hint");
-  if (!hint) return;
-
-  const warning = (container.ownerDocument ?? document).createElement("span");
-  warning.className = "daavy-addons-target-helper-warning";
-  warning.textContent = game.i18n.localize("DAAVY_ADDONS.Settings.TargetHelperAutomations.UnavailableHint");
-  hint.appendChild(warning);
 }
 
 function configureVisibility(container, controllerKey, targets) {

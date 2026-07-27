@@ -3,7 +3,6 @@
     "Settings": {
       "Groups": {
         "Features": "Features",
-        "TargetHelperAutomations": "Target Helper Automations",
         "ReachControl": "Reach Control"
       },
       "Sections": {
@@ -11,14 +10,9 @@
         "Stairways": "Stairways",
         "Tokens": "Tokens"
       },
-      "TargetHelperAutomations": {
-        "Name": "Target Helper Automations",
-        "Hint": "Automatically rolls saves and applies damage through PF2e Toolbelt's Target Helper.",
-        "UnavailableHint": "Requires a Pathfinder 2e world with PF2e Toolbelt active.",
-        "NpcsOnly": {
-          "Name": "NPCs Only",
-          "Hint": "Automatically roll saves and apply damage only for NPC targets."
-        }
+      "TargetHelper": {
+        "Name": "Target Helper",
+        "Hint": "Add manual target damage controls to Pathfinder 2e damage rolls."
       },
       "ReachControl": {
         "Name": "Reach Control",
@@ -62,6 +56,15 @@
           }
         }
       }
+    },
+    "TargetHelper": {
+      "Actions": {
+        "Damage": "Apply damage",
+        "Half": "Apply half damage",
+        "Double": "Apply double damage",
+        "Block": "Apply zero damage"
+      },
+      "ApplyError": "Unable to apply damage to this target."
     },
     "ReachControl": {
       "Placeables": {
