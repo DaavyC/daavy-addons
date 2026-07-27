@@ -18,6 +18,7 @@ export const TARGET_HELPER_FLAG = "targetHelper";
 export const TARGET_HELPER_DAMAGE_RESULT_FLAG = "targetHelperDamageResult";
 export const TARGET_HELPER_DAMAGE_UNDO_REQUEST = "targetHelperDamageUndo";
 export const TARGET_HELPER_SAVE_RESULT_FLAG = "targetHelperSaveResult";
+export const TARGET_HELPER_TARGETS_REQUEST = "targetHelperTargets";
 export const TARGET_HELPER_SOCKET = `module.${MODULE_ID}`;
 
 export const TARGET_HELPER_SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);

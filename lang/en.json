@@ -71,6 +71,8 @@
       },
       "ApplyError": "Unable to apply damage to this target.",
       "DamageResultError": "Unable to store this damage result. Applied damage was reverted.",
+      "AddTargets": "Add current targets",
+      "ClearTargets": "Clear targets and revert results",
       "UndoDamage": "Revert damage",
       "UndoError": "Unable to revert damage for this target.",
       "RollSave": "Roll Save",

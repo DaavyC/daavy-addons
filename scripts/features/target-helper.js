@@ -10,7 +10,8 @@ import {
   TARGET_HELPER_SAVE_OUTCOMES,
   TARGET_HELPER_SAVE_RESULT_FLAG,
   TARGET_HELPER_SAVE_TYPES,
-  TARGET_HELPER_SOCKET
+  TARGET_HELPER_SOCKET,
+  TARGET_HELPER_TARGETS_REQUEST
 } from "../constants.js";
 import { addPreCreateChatMessageHook } from "../hooks.js";
 import { getSetting, resolveUuid, resolveUuidSync as resolveTarget } from "../utils.js";
@@ -24,13 +25,27 @@ export function registerTargetHelperHooks() {
   addPreCreateChatMessageHook(captureTargets);
   Hooks.on("createChatMessage", (message, options) => {
     if (options?.render !== false) void refreshRelatedMessages(message);
+    const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+    if (link && message.flags?.pf2e?.context?.options?.includes("check:reroll:hero-points")) {
+      queueAutomation(() => reconcileAutomatedSaveDamage(link));
+    }
     queueTargetHelperAutomation(message);
   });
-  Hooks.on("updateChatMessage", refreshLinkedDamageHelpers);
+  Hooks.on("updateChatMessage", (message, changes) => {
+    void refreshLinkedDamageHelpers(message, changes);
+    const automationPath = `flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`;
+    if (
+      (
+        Object.hasOwn(changes, automationPath)
+        || foundry.utils.hasProperty(changes, automationPath)
+      )
+      && message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status === "pending"
+    ) {
+      queueTargetHelperAutomation(message);
+    }
+  });
   Hooks.on("deleteChatMessage", (message, options) => {
     if (options?.render !== false) void refreshRelatedMessages(message);
-    const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
-    if (link) queueAutomation(() => reconcileAutomatedSaveDamage(link));
   });
   Hooks.on("renderChatMessageHTML", renderTargetHelper);
   Hooks.on("updateUser", (_user, changes) => {
@@ -72,7 +87,8 @@ function captureTargets(message, _data, _options, userId) {
           automation: {
             type: pending.type,
             sourceMessageId: pending.sourceMessageId,
-            status: "pending"
+            status: "pending",
+            ...(pending.pendingTargets ? { pendingTargets: pending.pendingTargets } : {})
           }
         } : {})
       }
@@ -128,6 +144,7 @@ function queueAutomation(task) {
   automationQueue = automationQueue.then(task).catch((error) => {
     console.error(`${MODULE_ID} | Failed Target Helper automation`, error);
   });
+  return automationQueue;
 }
 
 function resumeTargetHelperAutomations() {
@@ -169,6 +186,12 @@ async function automateSource(message, data) {
   const targets = type === "attack"
     ? [resolveTarget(data.targets?.at(0))].filter((token) => token?.actor && token.object)
     : data.targets?.map(resolveTarget).filter((token) => token?.actor) ?? [];
+  const pendingTargetUuids = Array.isArray(data.automation.pendingTargets)
+    ? new Set(data.automation.pendingTargets)
+    : null;
+  const automationTargets = pendingTargetUuids
+    ? targets.filter((target) => pendingTargetUuids.has(target.uuid))
+    : targets;
   if (
     !targets.length
     || (type === "attack" ? !getAutomatedAttackTarget(message) : !isValidSave(data.save))
@@ -178,15 +201,8 @@ async function automateSource(message, data) {
   }
 
   const existing = findAutomatedDamageMessage(message.id);
-  if (existing) {
-    await updateAutomationState(message, {
-      status: "rolling-damage",
-      damageMessageId: existing.id
-    });
-    await applyAutomatedDamage(existing, existing.getFlag(MODULE_ID, TARGET_HELPER_FLAG));
-    return;
-  }
-  if (data.automation.status === "rolling-damage") {
+  const resumingDamage = data.automation.status === "rolling-damage";
+  if (!existing && resumingDamage) {
     await updateAutomationState(message, { status: "manual" });
     return;
   }
@@ -194,8 +210,8 @@ async function automateSource(message, data) {
   if (type === "basic-save") {
     await updateAutomationState(message, { status: "rolling-saves" }, false);
     const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-    const existingResults = indexSaveResultMessages(message, targets, current);
-    const pendingTargets = targets.filter((target) => !existingResults.has(target.uuid));
+    const existingResults = indexSaveResultMessages(message, automationTargets, current);
+    const pendingTargets = automationTargets.filter((target) => !existingResults.has(target.uuid));
     const [resolvedItem, resolvedOrigin] = pendingTargets.length
       ? await Promise.all([
         resolveUuid(current.save.itemUuid),
@@ -244,16 +260,41 @@ async function automateSource(message, data) {
     }
   }
 
+  if (existing) {
+    const existingData = existing.getFlag(MODULE_ID, TARGET_HELPER_FLAG) ?? {};
+    await existing.update({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.targets`]: [
+        ...new Set([...(existingData.targets ?? []), ...targets.map((target) => target.uuid)])
+      ],
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: {
+        ...existingData.automation,
+        status: "pending",
+        pendingTargets: pendingTargetUuids ? [...pendingTargetUuids] : null
+      }
+    }, { render: false });
+    await updateAutomationState(message, {
+      status: "rolling-damage",
+      damageMessageId: existing.id
+    }, false);
+    await applyAutomatedDamage(existing, existing.getFlag(MODULE_ID, TARGET_HELPER_FLAG));
+    return;
+  }
+
   if (type !== "basic-save") {
     await updateAutomationState(message, { status: "rolling-damage" }, false);
   }
-  const damageMessage = await rollAutomatedDamage(message, targets, type);
+  const damageMessage = await rollAutomatedDamage(
+    message,
+    targets,
+    type,
+    pendingTargetUuids ? [...pendingTargetUuids] : null
+  );
   await updateAutomationState(message, damageMessage
     ? { status: "rolling-damage", damageMessageId: damageMessage.id }
     : { status: "manual" }, false);
 }
 
-async function rollAutomatedDamage(sourceMessage, targets, type) {
+async function rollAutomatedDamage(sourceMessage, targets, type, pendingTargets = null) {
   const target = targets.at(0);
   const event = {
     target: null,
@@ -268,6 +309,7 @@ async function rollAutomatedDamage(sourceMessage, targets, type) {
     type,
     sourceMessageId: sourceMessage.id,
     targets: targets.map((token) => token.uuid),
+    pendingTargets,
     rollMultiplier: 1,
     damageMessage: null
   };
@@ -330,7 +372,10 @@ async function applyAutomatedDamage(message, data) {
 
   await updateAutomationState(message, { status: "applying" }, false);
   let complete = true;
-  for (const uuid of data.targets ?? []) {
+  const targets = Array.isArray(automation.pendingTargets)
+    ? automation.pendingTargets
+    : data.targets ?? [];
+  for (const uuid of targets) {
     const target = resolveTarget(uuid);
     if (!target?.actor) {
       complete = false;
@@ -346,10 +391,11 @@ async function applyAutomatedDamage(message, data) {
   }
 
   const status = complete ? "complete" : "failed";
-  await updateAutomationState(message, { status });
+  await updateAutomationState(message, { status, pendingTargets: null });
   await updateAutomationState(sourceMessage, {
     status,
-    damageMessageId: message.id
+    damageMessageId: message.id,
+    pendingTargets: null
   }, false);
   if (!complete) {
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
@@ -383,6 +429,7 @@ async function reconcileAutomatedSaveDamage(link) {
   const target = resolveTarget(link.targetUuid);
   if (
     sourceData?.automation?.type !== "basic-save"
+    || !sourceData.targets?.includes(link.targetUuid)
     || !damageMessage
     || !target?.actor
   ) {
@@ -400,7 +447,7 @@ async function reconcileAutomatedSaveDamage(link) {
   const currentMultiplier = currentResult?.multiplier;
   if (currentMultiplier === multiplier) return;
 
-  if (currentResult) await finalizeDamageUndo(damageMessage, target, currentResult);
+  if (currentResult) await finalizeDamageUndo(damageMessage, target, currentResult, false);
   const applied = await applyDamage(damageMessage, target, multiplier);
   const status = applied ? "complete" : "failed";
   await updateAutomationState(damageMessage, { status });
@@ -438,11 +485,15 @@ function renderTargetCard(message, root, data, damage) {
   }
   if (
     !Array.isArray(data?.targets)
-    || !data.targets.length
     || content.querySelector(".daavy-addons-target-helper")
+    || content.querySelector(".daavy-addons-target-helper-controls")
   ) {
     return;
   }
+
+  const controls = damage ? null : createTargetControls(message, data);
+  const footer = controls ? content.querySelector(".pf2e.chat-card > footer") : null;
+  if (footer) footer.append(controls);
 
   const targets = data.targets
     .map(resolveTarget)
@@ -451,11 +502,15 @@ function renderTargetCard(message, root, data, damage) {
       && (game.user.isGM || !(token.hidden || token.actor?.hasCondition("unnoticed", "undetected")))
       && (!damage || game.user.isGM || !token.actor?.isOfType("npc"))
     ));
-  if (!targets.length) return;
 
   const saveResultMessages = damage ? null : indexSaveResultMessages(message, targets, data);
   const card = document.createElement("section");
   card.className = "daavy-addons-target-helper";
+  if (controls && !footer) card.append(controls);
+  if (!targets.length) {
+    if (controls && !footer) content.append(card);
+    return;
+  }
   card.append(document.createElement("hr"));
   for (const target of targets) {
     card.append(damage
@@ -463,6 +518,58 @@ function renderTargetCard(message, root, data, damage) {
       : createSaveRow(message, target, data, saveResultMessages.get(target.uuid) ?? null));
   }
   content.append(card);
+}
+
+function createTargetControls(message, data) {
+  const controls = document.createElement("div");
+  const add = createIconButton(
+    "daavy-addons-target-helper-control daavy-addons-target-helper-add-targets",
+    '<i class="fa-solid fa-user-plus fa-fw" inert></i>',
+    game.i18n.localize("DAAVY_ADDONS.TargetHelper.AddTargets")
+  );
+  const clear = createIconButton(
+    "daavy-addons-target-helper-control daavy-addons-target-helper-clear-targets",
+    '<i class="fa-solid fa-eraser fa-fw" inert></i>',
+    game.i18n.localize("DAAVY_ADDONS.TargetHelper.ClearTargets")
+  );
+  const canManage = message.canUserModify(game.user, "update");
+
+  controls.className = "daavy-addons-target-helper-controls";
+  add.disabled = !canManage;
+  clear.disabled = !canManage || (!data.targets.length && !data.saveResults?.length && !data.damageResults?.length);
+  bindPendingButton(add, () => requestTargetHelperTargetChange(message, "add"), !canManage);
+  bindPendingButton(clear, () => requestTargetHelperTargetChange(message, "clear"), clear.disabled);
+  controls.append(add, clear);
+  return controls;
+}
+
+function requestTargetHelperTargetChange(message, action) {
+  if (!message.canUserModify(game.user, "update")) return false;
+  if (!game.users.activeGM) {
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.NoActiveGM", { localize: true });
+    return false;
+  }
+
+  const targets = action === "add"
+    ? Array.from(game.user.targets, (token) => token.document?.uuid).filter(Boolean)
+    : [];
+  if (
+    action === "add"
+    && !targets.some((uuid) => !message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.targets?.includes(uuid))
+  ) {
+    return false;
+  }
+
+  if (game.user.isActiveGM) {
+    return queueAutomation(() => updateTargetHelperTargets(message.id, action, targets, game.user));
+  }
+  game.socket.emit(TARGET_HELPER_SOCKET, {
+    type: TARGET_HELPER_TARGETS_REQUEST,
+    parentMessageId: message.id,
+    action,
+    targets
+  });
+  return true;
 }
 
 function createDamageRow(message, token, data) {
@@ -1212,7 +1319,172 @@ async function handleTargetHelperSocket(payload, userId) {
     await handleDamageResultSocket(payload, sender);
   } else if (payload?.type === TARGET_HELPER_DAMAGE_UNDO_REQUEST) {
     await handleDamageUndoSocket(payload, sender);
+  } else if (payload?.type === TARGET_HELPER_TARGETS_REQUEST) {
+    queueAutomation(() => updateTargetHelperTargets(
+      payload.parentMessageId,
+      payload.action,
+      payload.targets,
+      sender
+    ));
   }
+}
+
+async function updateTargetHelperTargets(messageId, action, requestedTargets, sender) {
+  const message = game.messages.get(messageId);
+  const data = message?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  if (
+    !message
+    || !["add", "clear"].includes(action)
+    || !message.canUserModify(sender, "update")
+    || !(isValidSave(data?.save) || isSupportedDamageRoll(message))
+  ) {
+    return false;
+  }
+
+  const sourceMessage = isValidSave(data.save)
+    ? message
+    : game.messages.get(data.saveMessageId ?? data.automation?.sourceMessageId);
+  const sourceData = sourceMessage?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  const validSource = isValidSave(sourceData?.save) ? sourceMessage : null;
+  const damageMessage = isSupportedDamageRoll(message)
+    ? message
+    : validSource
+      ? game.messages.get(sourceData.automation?.damageMessageId)
+        ?? findAutomatedDamageMessage(validSource.id)
+        ?? game.messages.contents.findLast((candidate) => (
+          isSupportedDamageRoll(candidate)
+          && candidate.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.saveMessageId === validSource.id
+        ))
+      : null;
+  const messages = [...new Set([validSource, damageMessage ?? message].filter(Boolean))];
+
+  if (action === "add") {
+    const targets = [...new Set(Array.isArray(requestedTargets) ? requestedTargets : [])]
+      .map(resolveTarget)
+      .filter((target) => (
+        target?.documentName === "Token"
+        && target.actor
+        && (
+          sender.isGM
+          || !(target.hidden || target.actor.hasCondition("unnoticed", "undetected"))
+        )
+      ));
+    const existing = new Set(messages.flatMap((targetMessage) => (
+      targetMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.targets ?? []
+    )));
+    const additions = targets.filter((target) => !existing.has(target.uuid));
+    const nextTargets = [...existing, ...additions.map((target) => target.uuid)];
+    const synchronized = messages.every((targetMessage) => {
+      const current = targetMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.targets ?? [];
+      return current.length === nextTargets.length && current.every((uuid) => existing.has(uuid));
+    });
+    if (!additions.length && synchronized) return false;
+
+    const basicAutomationMessage = messages.find((targetMessage) => (
+      targetMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.type === "basic-save"
+    ));
+    const automationTargets = basicAutomationMessage
+      ? targets.filter((target) => (
+        !basicAutomationMessage
+          .getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.targets?.includes(target.uuid)
+      ))
+      : additions;
+    const automationMessage = automationTargets.length && canUseTargetHelperAutomations()
+      ? basicAutomationMessage ?? damageMessage
+      : null;
+    const previous = [];
+    try {
+      for (const targetMessage of messages) {
+        const current = targetMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG) ?? {};
+        const automate = targetMessage === automationMessage && current.automation;
+        previous.push({ message: targetMessage, targets: current.targets, automation: current.automation });
+        await targetMessage.update({
+          [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.targets`]: nextTargets,
+          ...(automate ? {
+            [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: {
+              ...current.automation,
+              status: "pending",
+              pendingTargets: automationTargets.map((target) => target.uuid)
+            }
+          } : {})
+        });
+      }
+      return true;
+    } catch (error) {
+      for (const state of previous.reverse()) {
+        await state.message.update({
+          [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.targets`]: state.targets,
+          ...(state.automation ? {
+            [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: state.automation
+          } : {})
+        }).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
+  let undoFailed = false;
+  const damageResults = damageMessage
+    ?.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.damageResults ?? [];
+  for (const result of [...damageResults].reverse()) {
+    const target = resolveTarget(result?.targetUuid);
+    try {
+      if (
+        !target?.actor
+        || !isValidDamageResult(result, target)
+        || !await finalizeDamageUndo(damageMessage, target, result, false)
+      ) {
+        undoFailed = true;
+      }
+    } catch (error) {
+      undoFailed = true;
+      console.error(`${MODULE_ID} | Failed to clear Target Helper damage`, error);
+    }
+  }
+  if (undoFailed) {
+    const current = damageMessage?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+    if (damageMessage) {
+      await damageMessage.update({
+        [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.damageResults`]: current?.damageResults ?? []
+      });
+    }
+    ui.notifications.error("DAAVY_ADDONS.TargetHelper.UndoError", { localize: true });
+    return false;
+  }
+
+  for (const targetMessage of messages) {
+    const current = targetMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG) ?? {};
+    await targetMessage.update({
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.targets`]: [],
+      ...(Array.isArray(current.saveResults) ? {
+        [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.saveResults`]: []
+      } : {}),
+      ...(Array.isArray(current.damageResults) ? {
+        [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.damageResults`]: []
+      } : {}),
+      ...(current.automation ? {
+        [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: {
+          ...current.automation,
+          status: "manual",
+          pendingTargets: null
+        }
+      } : {})
+    });
+  }
+  const saveMessages = validSource
+    ? game.messages.contents.filter((candidate) => (
+      candidate.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)?.parentMessageId === validSource.id
+    ))
+    : [];
+  const deletions = await Promise.allSettled(saveMessages.map((resultMessage) => (
+    resultMessage.delete({ render: false })
+  )));
+  for (const deletion of deletions) {
+    if (deletion.status === "rejected") {
+      console.error(`${MODULE_ID} | Failed to delete cleared Target Helper save`, deletion.reason);
+    }
+  }
+  return true;
 }
 
 async function handleSaveResultSocket(payload, sender) {
@@ -1397,6 +1669,7 @@ async function applyDamage(message, token, multiplier, renderResult = true) {
 
   let damageResult = null;
   let submitted = false;
+  let rollbackAttempted = false;
   try {
     const context = message.flags.pf2e.context;
     const messageRollOptions = [...(context?.options ?? [])];
@@ -1493,12 +1766,15 @@ async function applyDamage(message, token, multiplier, renderResult = true) {
       submitted = true;
     }
     if (!submitted) {
+      rollbackAttempted = true;
       await rollbackDamageResult(token.actor, damageResult);
       return false;
     }
     return true;
   } catch (error) {
-    if (!submitted && damageResult) await rollbackDamageResult(token.actor, damageResult);
+    if (!submitted && !rollbackAttempted && damageResult) {
+      await rollbackDamageResult(token.actor, damageResult);
+    }
     console.error(`${MODULE_ID} | Failed to apply Target Helper damage`, error);
     ui.notifications.error(
       damageResult
@@ -1521,7 +1797,43 @@ async function appendDamageResult(message, result, render = true) {
 }
 
 async function rollbackDamageResult(actor, result) {
-  if (result.appliedDamage) await actor.undoDamage(result.appliedDamage);
+  const appliedDamage = result.appliedDamage;
+  if (!appliedDamage) return;
+
+  const expectsActorUpdate = (
+    appliedDamage.updates.some((update) => (
+      typeof foundry.utils.getProperty(actor, update.path) === "number"
+    ))
+    || !!(appliedDamage.shield && actor.inventory.get(appliedDamage.shield.id))
+  );
+  if (!expectsActorUpdate) {
+    await actor.undoDamage(appliedDamage);
+    return;
+  }
+
+  let timeout;
+  let onUpdate;
+  const updated = new Promise((resolve, reject) => {
+    onUpdate = (updatedActor, _changes, options) => {
+      if (updatedActor !== actor || options?.damageUndo !== true) return;
+      Hooks.off("updateActor", onUpdate);
+      globalThis.clearTimeout(timeout);
+      resolve();
+    };
+    Hooks.on("updateActor", onUpdate);
+    timeout = globalThis.setTimeout(() => {
+      Hooks.off("updateActor", onUpdate);
+      reject(new Error("PF2e damage undo update timed out"));
+    }, 10000);
+  });
+
+  try {
+    await actor.undoDamage(appliedDamage);
+    await updated;
+  } finally {
+    Hooks.off("updateActor", onUpdate);
+    globalThis.clearTimeout(timeout);
+  }
 }
 
 async function undoDamage(message, token) {
@@ -1553,15 +1865,15 @@ async function undoDamage(message, token) {
   }
 }
 
-async function finalizeDamageUndo(parentMessage, token, result) {
-  if (result.appliedDamage) await token.actor.undoDamage(result.appliedDamage);
+async function finalizeDamageUndo(parentMessage, token, result, render = true) {
+  await rollbackDamageResult(token.actor, result);
   const data = parentMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
   const results = Array.isArray(data?.damageResults) ? data.damageResults : [];
   const remaining = results.filter((entry) => entry?.targetUuid !== result.targetUuid);
   if (remaining.length === results.length) return false;
   await parentMessage.update({
     [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.damageResults`]: remaining
-  });
+  }, { render });
   return true;
 }
 
