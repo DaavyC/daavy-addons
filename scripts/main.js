@@ -1,6 +1,11 @@
+import { MODULE_ID } from "./constants.js";
 import { injectFeedbackButtons } from "./feedback.js";
 import { registerReachControlHooks } from "./features/reach-control.js";
-import { registerTargetHelperHooks } from "./features/target-helper.js";
+import {
+  automateTargetHelperMessage,
+  createTargetHelperMessage,
+  registerTargetHelperHooks
+} from "./features/target-helper.js";
 import { organizeSettingsConfig, registerSettings } from "./settings.js";
 
 Hooks.on("renderSettingsConfig", (_app, html) => {
@@ -8,7 +13,15 @@ Hooks.on("renderSettingsConfig", (_app, html) => {
   injectFeedbackButtons(html);
 });
 
-Hooks.once("init", registerSettings);
+Hooks.once("init", () => {
+  registerSettings();
+  game.modules.get(MODULE_ID).api = {
+    targetHelper: {
+      createMessage: createTargetHelperMessage,
+      automate: automateTargetHelperMessage
+    }
+  };
+});
 
 registerReachControlHooks();
 registerTargetHelperHooks();

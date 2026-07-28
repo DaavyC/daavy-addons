@@ -21,6 +21,39 @@ const SINGLE_CLICK_DELAY = 250;
 let automationQueue = Promise.resolve();
 let pendingDamageAutomation = null;
 
+export async function createTargetHelperMessage(data, { targets, automate = false } = {}) {
+  if (!canUseTargetHelper()) return getDocumentClass("ChatMessage").create(data);
+
+  return getDocumentClass("ChatMessage").create(data, {
+    [MODULE_ID]: {
+      targetHelper: {
+        targets: normalizeTargetUuids(targets),
+        automate: automate === true
+      }
+    }
+  });
+}
+
+export async function automateTargetHelperMessage(message, { targets } = {}) {
+  if (message?.documentName !== "ChatMessage" || !canUseTargetHelperAutomations()) return false;
+
+  const data = prepareTargetHelperData(message, normalizeTargetUuids(targets), {
+    automate: true,
+    automateDamage: true
+  });
+  if (!data?.automation) return false;
+
+  const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG) ?? {};
+  await message.update({
+    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
+      ...data,
+      ...(Array.isArray(current.saveResults) ? { saveResults: current.saveResults } : {}),
+      ...(Array.isArray(current.damageResults) ? { damageResults: current.damageResults } : {})
+    }
+  });
+  return true;
+}
+
 export function registerTargetHelperHooks() {
   addPreCreateChatMessageHook(captureTargets);
   Hooks.on("createChatMessage", (message, options) => {
@@ -59,17 +92,24 @@ export function registerTargetHelperHooks() {
   });
 }
 
-function captureTargets(message, _data, _options, userId) {
+function captureTargets(message, _data, options, userId) {
   if (userId !== game.user.id || !canUseTargetHelper()) return;
   if (message.flags?.pf2e?.context?.type === "damage-taken") return;
 
+  const request = options?.[MODULE_ID]?.targetHelper;
+  const pending = pendingDamageAutomation;
+  const targets = pending?.targets
+    ?? request?.targets
+    ?? normalizeTargetUuids();
+  const automate = canUseTargetHelperAutomations() && (request ? request.automate === true : true);
+  const data = prepareTargetHelperData(message, targets, {
+    automate,
+    automateDamage: request?.automate === true,
+    pending
+  });
+  if (!data) return;
+
   if (isSupportedDamageRoll(message)) {
-    const pending = pendingDamageAutomation;
-    const targets = pending?.targets
-      ?? Array.from(game.user.targets, (token) => token.document?.uuid).filter(Boolean);
-    const saveMessage = pending?.type === "basic-save"
-      ? game.messages.get(pending.sourceMessageId)
-      : findBasicSaveMessage(message);
     if (pending) pending.damageMessage = message;
     const sourceMessage = game.messages.get(pending?.sourceMessageId);
     const rolls = pending?.rollMultiplier === 2
@@ -81,49 +121,90 @@ function captureTargets(message, _data, _options, userId) {
         whisper: [...sourceMessage.whisper],
         blind: sourceMessage.blind
       } : {}),
-      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
-        targets,
-        damageResults: [],
-        ...(saveMessage ? { saveMessageId: saveMessage.id } : {}),
-        ...(pending ? {
-          automation: {
-            type: pending.type,
-            sourceMessageId: pending.sourceMessageId,
-            status: "pending",
-            ...(pending.outcome ? { outcome: pending.outcome } : {}),
-            ...(pending.pendingTargets ? { pendingTargets: pending.pendingTargets } : {})
-          }
-        } : {})
-      }
+      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: data
     });
     return;
+  }
+
+  message.updateSource({
+    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: data
+  });
+}
+
+function prepareTargetHelperData(
+  message,
+  targets,
+  { automate = false, automateDamage = false, pending = null } = {}
+) {
+  if (message.flags?.pf2e?.context?.type === "damage-taken") return null;
+
+  if (isSupportedDamageRoll(message)) {
+    const saveMessage = pending?.type === "basic-save"
+      ? game.messages.get(pending.sourceMessageId)
+      : findBasicSaveMessage(message);
+    const automation = pending
+      ? {
+          type: pending.type,
+          sourceMessageId: pending.sourceMessageId,
+          status: "pending",
+          ...(pending.outcome ? { outcome: pending.outcome } : {}),
+          ...(pending.pendingTargets ? { pendingTargets: pending.pendingTargets } : {})
+        }
+      : automate && automateDamage
+        ? { type: "attack", sourceMessageId: message.id, status: "pending" }
+        : null;
+    return {
+      targets,
+      damageResults: [],
+      ...(saveMessage ? { saveMessageId: saveMessage.id } : {}),
+      ...(automation ? { automation } : {})
+    };
   }
 
   const attackTarget = getAutomatedAttackTarget(message);
-  if (attackTarget && canUseTargetHelperAutomations()) {
-    message.updateSource({
-      [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
-        targets: [attackTarget.uuid],
-        automation: { type: "attack", status: "pending" }
-      }
-    });
-    return;
+  if (attackTarget) {
+    return {
+      targets: [attackTarget.uuid],
+      ...(automate ? { automation: { type: "attack", status: "pending" } } : {})
+    };
   }
 
-  const targets = Array.from(game.user.targets, (token) => token.document?.uuid).filter(Boolean);
   const save = getStructuredSave(message);
-  if (!save) return;
+  if (!save) return null;
 
-  message.updateSource({
-    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
-      targets,
-      save,
-      saveResults: [],
-      ...(canUseTargetHelperAutomations() && isBasicSave(save)
-        ? { automation: { type: "basic-save", status: "pending" } }
-        : {})
+  return {
+    targets,
+    save,
+    saveResults: [],
+    ...(automate && isBasicSave(save)
+      ? { automation: { type: "basic-save", status: "pending" } }
+      : {})
+  };
+}
+
+function normalizeTargetUuids(targets = game.user.targets) {
+  const values = (
+    typeof targets === "string"
+    || targets?.documentName === "Token"
+    || targets?.document?.documentName === "Token"
+  )
+    ? [targets]
+    : targets;
+  if (!values?.[Symbol.iterator]) {
+    throw new TypeError("Target Helper targets must be Token, TokenDocument, Token UUID, or iterable");
+  }
+
+  return [...new Set(Array.from(values, (target) => {
+    if (typeof target === "string") {
+      if (resolveTarget(target)?.documentName === "Token") return target;
+    } else {
+      const document = target?.documentName === "Token" ? target : target?.document;
+      if (document?.documentName === "Token" && typeof document.uuid === "string") {
+        return document.uuid;
+      }
     }
-  });
+    throw new TypeError("Target Helper targets must contain only Token, TokenDocument, or Token UUID values");
+  }))];
 }
 
 function queueTargetHelperAutomation(message) {
@@ -474,7 +555,7 @@ async function reconcileAutomatedAttackReroll(message, data) {
     || context?.type !== "attack-roll"
     || context.isReroll !== true
     || !context.options?.includes("check:reroll:hero-points")
-    || message._attack?.type !== "strike"
+    || !isSupportedAttackRoll(message, true)
     || target?.uuid !== data.targets?.at(0)
     || !author
     || !(author.isGM || message.actor?.testUserPermission(author, "OWNER"))
@@ -527,7 +608,7 @@ async function reconcileAutomatedAttackReroll(message, data) {
       }
     } catch (error) {
       reverted = false;
-      console.error(`${MODULE_ID} | Failed to revert Target Helper Strike reroll damage`, error);
+      console.error(`${MODULE_ID} | Failed to revert Target Helper attack reroll damage`, error);
     }
   }
   if (!reverted) {
@@ -560,7 +641,7 @@ function renderTargetHelper(message, html) {
   }
   if (!canUseTargetHelper()) return;
 
-  renderStrikeHeroPointReroll(message, html);
+  renderAttackHeroPointReroll(message, html);
   const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
   if (isSupportedDamageRoll(message)) {
     renderTargetCard(message, html, data, true);
@@ -569,18 +650,14 @@ function renderTargetHelper(message, html) {
   }
 }
 
-function renderStrikeHeroPointReroll(message, root) {
+function renderAttackHeroPointReroll(message, root) {
   const actor = message.actor;
-  const context = message.flags?.pf2e?.context;
   const target = message.target?.token;
   const total = root.querySelector(".dice-total");
   const automationStatus = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status;
   const canReroll = (
     canUseTargetHelperAutomations()
-    && message._attack?.type === "strike"
-    && context?.type === "attack-roll"
-    && context.damaging === true
-    && context.isReroll !== true
+    && isSupportedAttackRoll(message)
     && target?.actor
     && actor?.isOfType("character")
     && actor.heroPoints.value > 0
@@ -595,7 +672,7 @@ function renderStrikeHeroPointReroll(message, root) {
     '<i class="fa-solid fa-circle-h fa-fw" inert></i>',
     game.i18n.localize("PF2E.RerollMenu.HeroPoint")
   );
-  bindPendingButton(button, () => rerollStrike(message, target));
+  bindPendingButton(button, () => rerollAttack(message, target));
   total.append(button);
 }
 
@@ -1093,14 +1170,21 @@ function canUseTargetHelperAutomations() {
 function getAutomatedAttackTarget(message, includeReroll = false) {
   const context = message?.flags?.pf2e?.context;
   return (
-    message?.isCheckRoll === true
-    && context?.type === "attack-roll"
-    && context?.damaging === true
-    && (includeReroll || context?.isReroll !== true)
+    isSupportedAttackRoll(message, includeReroll)
     && ["success", "criticalSuccess"].includes(context.outcome)
   )
     ? message.target?.token ?? null
     : null;
+}
+
+function isSupportedAttackRoll(message, includeReroll = false) {
+  const context = message?.flags?.pf2e?.context;
+  return (
+    message?.isCheckRoll === true
+    && context?.type === "attack-roll"
+    && (context.damaging === true || context.domains?.includes("spell-attack-roll"))
+    && (includeReroll || context.isReroll !== true)
+  );
 }
 
 function isSupportedDamageRoll(message) {
@@ -1297,7 +1381,7 @@ async function rollSave(message, token, save, event, options = {}) {
   }
 }
 
-async function rerollStrike(message, target) {
+async function rerollAttack(message, target) {
   const actor = message.actor;
   const context = message.flags?.pf2e?.context;
   const targetHelper = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
@@ -1306,9 +1390,7 @@ async function rerollStrike(message, target) {
     return false;
   }
   if (
-    message._attack?.type !== "strike"
-    || context?.type !== "attack-roll"
-    || context.isReroll === true
+    !isSupportedAttackRoll(message)
     || target?.uuid !== message.target?.token?.uuid
     || !actor?.isOfType("character")
     || actor.heroPoints.value < 1
@@ -1353,7 +1435,7 @@ async function rerollStrike(message, target) {
   try {
     await game.pf2e.Check.rerollFromMessage(message, { resource: "hero-points" });
     const rerollMessage = createdReroll;
-    if (!rerollMessage) throw new Error("PF2e Strike reroll message was not captured");
+    if (!rerollMessage) throw new Error("PF2e attack reroll message was not captured");
 
     const source = rerollMessage.toObject();
     await message.update({
@@ -1376,7 +1458,7 @@ async function rerollStrike(message, target) {
     await rerollMessage.delete({ render: false });
     return true;
   } catch (error) {
-    console.error(`${MODULE_ID} | Failed to reroll Target Helper Strike`, error);
+    console.error(`${MODULE_ID} | Failed to reroll Target Helper attack`, error);
     ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
     return false;
   } finally {
