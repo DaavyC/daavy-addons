@@ -1,25 +1,50 @@
-import {
-  MODULE_ID,
-  SETTINGS,
-  TARGET_HELPER_BASIC_SAVE_MULTIPLIERS,
-  TARGET_HELPER_DAMAGE_ACTIONS,
-  TARGET_HELPER_DAMAGE_RESULT_FLAG,
-  TARGET_HELPER_DAMAGE_UPDATE_PATHS,
-  TARGET_HELPER_DAMAGE_UNDO_REQUEST,
-  TARGET_HELPER_FLAG,
-  TARGET_HELPER_SAVE_OUTCOMES,
-  TARGET_HELPER_SAVE_RESULT_FLAG,
-  TARGET_HELPER_SAVE_TYPES,
-  TARGET_HELPER_SOCKET,
-  TARGET_HELPER_TARGETS_REQUEST
-} from "../constants.js";
+import { MODULE_ID, SETTINGS } from "../constants.js";
 import { addPreCreateChatMessageHook } from "../hooks.js";
-import { getSetting, resolveUuid, resolveUuidSync as resolveTarget } from "../utils.js";
+import { getSetting, resolveUuid } from "../utils.js";
 
 const LONG_PRESS_DELAY = 500;
 const SINGLE_CLICK_DELAY = 250;
+const TARGET_HELPER_FLAG = "targetHelper";
+const TARGET_HELPER_DAMAGE_RESULT_FLAG = "targetHelperDamageResult";
+const TARGET_HELPER_DAMAGE_UNDO_REQUEST = "targetHelperDamageUndo";
+const TARGET_HELPER_SAVE_RESULT_FLAG = "targetHelperSaveResult";
+const TARGET_HELPER_TARGETS_REQUEST = "targetHelperTargets";
+const TARGET_HELPER_SOCKET = `module.${MODULE_ID}`;
+const TARGET_HELPER_SAVE_OUTCOMES = [
+  "criticalFailure",
+  "failure",
+  "success",
+  "criticalSuccess"
+];
+const TARGET_HELPER_DAMAGE_UPDATE_PATHS = new Set([
+  "system.attributes.hp.temp",
+  "system.attributes.hp.sp.value",
+  "system.attributes.hp.value"
+]);
+const TARGET_HELPER_ACTIONS = [
+  { kind: "damage", key: "Damage", icon: '<i class="fa-solid fa-heart-crack fa-fw" inert></i>', multiplier: 1 },
+  { kind: "damage", key: "Half", icon: '<i class="fa-solid fa-heart-crack fa-fw" inert></i>', multiplier: 0.5 },
+  { kind: "damage", key: "Double", icon: '<img src="systems/pf2e/icons/damage/double.svg" alt="">', multiplier: 2 },
+  { kind: "damage", key: "Block", icon: '<i class="fa-solid fa-shield-blank fa-fw" inert></i>', multiplier: 0 },
+  {
+    kind: "healing",
+    key: "Healing",
+    icon: '<span class="fa-stack fa-fw" inert><i class="fa-solid fa-heart fa-stack-2x"></i><i class="fa-solid fa-plus fa-inverse fa-stack-1x"></i></span>',
+    multiplier: -1
+  }
+];
+const TARGET_HELPER_BASIC_SAVE_MULTIPLIERS = {
+  criticalFailure: 2,
+  failure: 1,
+  success: 0.5,
+  criticalSuccess: 0
+};
 let automationQueue = Promise.resolve();
 let pendingDamageAutomation = null;
+
+const resolveTarget = (uuid) => (
+  typeof uuid === "string" ? fromUuidSync(uuid, { strict: false }) : null
+);
 
 export async function createTargetHelperMessage(data, { targets, automate = false } = {}) {
   if (!canUseTargetHelper()) return getDocumentClass("ChatMessage").create(data);
@@ -296,8 +321,11 @@ async function automateSource(message, data) {
   if (type === "basic-save") {
     await updateAutomationState(message, { status: "rolling-saves" }, false);
     const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-    const existingResults = indexSaveResultMessages(message, automationTargets, current);
-    const pendingTargets = automationTargets.filter((target) => !existingResults.has(target.uuid));
+    const saveTargets = automationTargets.filter((target) => (
+      getSaveApplicationKind(message, target) !== "healing"
+    ));
+    const existingResults = indexSaveResultMessages(message, saveTargets, current);
+    const pendingTargets = saveTargets.filter((target) => !existingResults.has(target.uuid));
     const [resolvedItem, resolvedOrigin] = pendingTargets.length
       ? await Promise.all([
         resolveUuid(current.save.itemUuid),
@@ -459,9 +487,11 @@ async function applyAutomatedDamage(message, data) {
 
   await updateAutomationState(message, { status: "applying" }, false);
   let complete = true;
+  let manual = false;
   const targets = Array.isArray(automation.pendingTargets)
     ? automation.pendingTargets
     : data.targets ?? [];
+  const applications = [];
   for (const uuid of targets) {
     const target = resolveTarget(uuid);
     if (!target?.actor) {
@@ -469,12 +499,35 @@ async function applyAutomatedDamage(message, data) {
       continue;
     }
     const existingResult = findDamageResult(message, target.uuid);
-    if (existingResult) continue;
+    if (existingResult) {
+      applications.push({ target, multiplier: null });
+      continue;
+    }
 
-    const multiplier = automation.type === "attack"
-      ? 1
-      : getRecommendedDamageMultiplier(message, target, data);
-    if (multiplier === null || !await applyDamage(message, target, multiplier, false)) complete = false;
+    const multiplier = getRecommendedApplicationMultiplier(message, target, data);
+    if (multiplier === null) {
+      manual = true;
+      continue;
+    }
+    applications.push({ target, multiplier });
+  }
+
+  if (!complete || manual) {
+    const status = complete ? "manual" : "failed";
+    await updateAutomationState(message, { status, pendingTargets: null });
+    await updateAutomationState(sourceMessage, {
+      status,
+      damageMessageId: message.id,
+      pendingTargets: null
+    }, automation.type === "attack");
+    if (!complete) {
+      ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
+    }
+    return;
+  }
+
+  for (const { target, multiplier } of applications) {
+    if (multiplier !== null && !await applyDamage(message, target, multiplier, false)) complete = false;
   }
 
   const status = complete ? "complete" : "failed";
@@ -523,12 +576,9 @@ async function reconcileAutomatedSaveDamage(link) {
     return;
   }
 
-  const resultMessage = resolveSaveResultMessage(sourceMessage, target, sourceData);
-  const outcome = resultMessage?.visible
-    ? resultMessage.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG)?.outcome
-    : null;
-  const multiplier = TARGET_HELPER_BASIC_SAVE_MULTIPLIERS[outcome];
-  if (multiplier === undefined) return;
+  const damageData = damageMessage.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
+  const multiplier = getRecommendedApplicationMultiplier(damageMessage, target, damageData);
+  if (multiplier === null) return;
 
   const currentResult = findDamageResult(damageMessage, target.uuid);
   const currentMultiplier = currentResult?.multiplier;
@@ -595,22 +645,7 @@ async function reconcileAutomatedAttackReroll(message, data) {
     return;
   }
 
-  let reverted = true;
-  for (const result of [...(previousData?.damageResults ?? [])].reverse()) {
-    const resultTarget = resolveTarget(result?.targetUuid);
-    try {
-      if (
-        !resultTarget?.actor
-        || !isValidDamageResult(result, resultTarget)
-        || !await finalizeDamageUndo(previousDamage, resultTarget, result, false)
-      ) {
-        reverted = false;
-      }
-    } catch (error) {
-      reverted = false;
-      console.error(`${MODULE_ID} | Failed to revert Target Helper attack reroll damage`, error);
-    }
-  }
+  const reverted = await revertDamageResults(previousDamage, previousData?.damageResults, "Failed to revert Target Helper attack reroll damage");
   if (!reverted) {
     if (previousDamage) await updateAutomationState(previousDamage, { status: "failed" });
     await updateAutomationState(message, { status: "failed" });
@@ -776,7 +811,7 @@ function requestTargetHelperTargetChange(message, action) {
 
 function createDamageRow(message, token, data) {
   const row = createTargetRow(token);
-  const recommendedMultiplier = getRecommendedDamageMultiplier(message, token, data);
+  const recommendedMultiplier = getRecommendedApplicationMultiplier(message, token, data);
   const result = data?.damageResults?.find((entry) => entry?.targetUuid === token.uuid);
   if (result) {
     row.append(createDamageResult(message, token, result));
@@ -787,7 +822,7 @@ function createDamageRow(message, token, data) {
   const canApply = game.user.isGM || token.isOwner;
 
   actions.className = "daavy-addons-target-helper-actions";
-  for (const action of TARGET_HELPER_DAMAGE_ACTIONS) {
+  for (const action of getTargetHelperActions(message)) {
     const label = game.i18n.localize(`DAAVY_ADDONS.TargetHelper.Actions.${action.key}`);
     const button = createIconButton(`daavy-addons-target-helper-action ${action.key.toLowerCase()}`, action.icon, label);
 
@@ -889,17 +924,84 @@ function getRecommendedDamageMultiplier(message, token, data) {
   return TARGET_HELPER_BASIC_SAVE_MULTIPLIERS[outcome] ?? null;
 }
 
+function getRecommendedApplicationMultiplier(message, token, data) {
+  const roll = message.rolls.at(0);
+  const hasDamage = roll?.kinds?.has("damage") === true;
+  const hasHealing = roll?.kinds?.has("healing") === true;
+  if (hasHealing && !hasDamage) return -1;
+
+  if (hasDamage && hasHealing) {
+    const kind = getMixedApplicationKind(roll, token.actor);
+    if (kind === "healing") return -1;
+    if (kind !== "damage") return null;
+  }
+
+  return data?.automation?.type === "attack"
+    ? 1
+    : getRecommendedDamageMultiplier(message, token, data);
+}
+
+function getMixedApplicationKind(roll, actor) {
+  const instances = roll?.instances ?? [];
+  if (
+    !instances.length
+    || !instances.every((instance) => (
+      instance.kinds?.has("damage") === true
+      && instance.kinds.has("healing")
+    ))
+  ) {
+    return null;
+  }
+
+  return getEnergyApplicationKind(instances.map((instance) => instance.type), actor);
+}
+
+function getSaveApplicationKind(message, token) {
+  const damage = Object.values(getSpellLikeItem(message)?.system?.damage ?? {});
+  if (
+    !damage.length
+    || !damage.every((partial) => (
+      partial.kinds?.has("damage") === true
+      && partial.kinds.has("healing")
+    ))
+  ) {
+    return null;
+  }
+
+  return getEnergyApplicationKind(damage.map((partial) => partial.type), token.actor);
+}
+
+function getEnergyApplicationKind(damageTypes, actor) {
+  if (!actor?.isOfType("creature") || actor.modeOfBeing === "construct") return null;
+
+  const types = new Set(damageTypes);
+  if (types.size !== 1) return null;
+
+  const type = types.values().next().value;
+  const negativeHealing = actor.system.attributes.hp.negativeHealing === true;
+  if (type === "vitality") return negativeHealing ? "damage" : "healing";
+  if (type === "void") return negativeHealing ? "healing" : "damage";
+  return null;
+}
+
+function getTargetHelperActions(message) {
+  const kinds = message?.rolls?.at(0)?.kinds;
+  return TARGET_HELPER_ACTIONS.filter(({ kind }) => kinds?.has(kind) ?? kind === "damage");
+}
+
 function createDamageResult(message, token, result) {
   const container = document.createElement("div");
   const amount = document.createElement("span");
-  const button = createIconButton("daavy-addons-target-helper-undo", '<i class="fa-solid fa-rotate-left fa-fw" inert></i>', game.i18n.localize("DAAVY_ADDONS.TargetHelper.UndoDamage"));
+  const isHealing = result.multiplier < 0;
+  const undoKey = isHealing ? "UndoHealing" : "UndoDamage";
+  const button = createIconButton("daavy-addons-target-helper-undo", '<i class="fa-solid fa-rotate-left fa-fw" inert></i>', game.i18n.localize(`DAAVY_ADDONS.TargetHelper.${undoKey}`));
   const visible = canViewDamageResult(result);
   const canUndo = visible && (game.user.isGM || token.isOwner);
 
   container.className = "daavy-addons-target-helper-damage-result";
   amount.className = "daavy-addons-target-helper-damage-amount";
   amount.textContent = visible && Number.isFinite(result.amount)
-    ? result.amount
+    ? `${isHealing ? "+" : ""}${result.amount}`
     : game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
 
   button.disabled = !canUndo;
@@ -959,6 +1061,14 @@ function isValidIwrApplications(applications) {
 
 function createSaveRow(message, token, data, resultMessage) {
   const row = createTargetRow(token);
+  if (getSaveApplicationKind(message, token) === "healing") {
+    const result = document.createElement("span");
+    result.className = "daavy-addons-target-helper-save-result healing";
+    result.textContent = game.i18n.localize("DAAVY_ADDONS.TargetHelper.HealingResult");
+    row.append(result);
+    return row;
+  }
+
   const result = data.saveResults?.find((entry) => entry?.targetUuid === token.uuid);
   if (result || resultMessage) {
     row.append(createSaveResult(message, token, resultMessage));
@@ -1052,7 +1162,7 @@ function createSaveResult(parentMessage, token, resultMessage) {
     label.className = "daavy-addons-target-helper-save-label";
     label.textContent = game.i18n.localize(`PF2E.Check.Result.Degree.Check.${outcome}`);
     value.textContent = total;
-    element.append(label, " ", value);
+    element.append(label, value);
   } else {
     element.classList.add("hidden-result");
     element.textContent = game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
@@ -1299,7 +1409,7 @@ function splitOptions(value) {
 }
 
 function isSaveType(value) {
-  return typeof value === "string" && TARGET_HELPER_SAVE_TYPES.has(value);
+  return Object.hasOwn(CONFIG.PF2E.saves, value);
 }
 
 function isValidSave(save) {
@@ -1719,24 +1829,9 @@ async function updateTargetHelperTargets(messageId, action, requestedTargets, se
     }
   }
 
-  let undoFailed = false;
   const damageResults = damageMessage
     ?.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.damageResults ?? [];
-  for (const result of [...damageResults].reverse()) {
-    const target = resolveTarget(result?.targetUuid);
-    try {
-      if (
-        !target?.actor
-        || !isValidDamageResult(result, target)
-        || !await finalizeDamageUndo(damageMessage, target, result, false)
-      ) {
-        undoFailed = true;
-      }
-    } catch (error) {
-      undoFailed = true;
-      console.error(`${MODULE_ID} | Failed to clear Target Helper damage`, error);
-    }
-  }
+  const undoFailed = !await revertDamageResults(damageMessage, damageResults, "Failed to clear Target Helper damage");
   if (undoFailed) {
     const current = damageMessage?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
     if (damageMessage) {
@@ -1825,15 +1920,16 @@ async function handleSaveResultSocket(payload, sender) {
 }
 
 async function handleDamageResultSocket(payload, sender) {
+  let parent = null;
   let target = null;
   try {
-    const parent = game.messages.get(payload.parentMessageId);
+    parent = game.messages.get(payload.parentMessageId);
     target = resolveTarget(payload.targetUuid);
     const data = parent?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
     const authenticated = (
       target?.actor
       && (sender.isGM || target.actor.testUserPermission(sender, "OWNER"))
-      && isValidDamageResult(payload.result, target)
+      && isValidDamageResult(payload.result, target, parent)
     );
     const valid = (
       authenticated
@@ -1852,7 +1948,7 @@ async function handleDamageResultSocket(payload, sender) {
     if (
       target?.actor
       && (sender.isGM || target.actor.testUserPermission(sender, "OWNER"))
-      && isValidDamageResult(payload.result, target)
+      && isValidDamageResult(payload.result, target, parent)
     ) {
       try {
         await rollbackDamageResult(target.actor, payload.result);
@@ -1874,7 +1970,7 @@ async function handleDamageUndoSocket(payload, sender) {
       && result
       && target?.actor
       && (sender.isGM || target.actor.testUserPermission(sender, "OWNER"))
-      && isValidDamageResult(result, target)
+      && isValidDamageResult(result, target, parent)
     );
     if (!valid) return;
 
@@ -1896,13 +1992,18 @@ function isLinkedSaveResult(message, target, save, link, reroll = false) {
   );
 }
 
-function isValidDamageResult(result, target) {
+function isValidDamageResult(result, target, message = null) {
   const appliedDamage = result?.appliedDamage ?? null;
   return (
     result?.targetUuid === target.uuid
     && Number.isFinite(result.amount)
-    && TARGET_HELPER_DAMAGE_ACTIONS.some((action) => action.multiplier === result.multiplier)
+    && TARGET_HELPER_ACTIONS.some((action) => action.multiplier === result.multiplier)
+    && (
+      !message
+      || getTargetHelperActions(message).some((action) => action.multiplier === result.multiplier)
+    )
     && result.amount === getAppliedDamageAmount(appliedDamage)
+    && (appliedDamage === null || appliedDamage.isHealing === (result.multiplier < 0))
     && Array.isArray(result.whisper)
     && result.whisper.every((id) => typeof id === "string")
     && typeof result.blind === "boolean"
@@ -1916,7 +2017,7 @@ function isValidAppliedDamage(appliedDamage, target) {
   if (appliedDamage === null) return true;
   return (
     appliedDamage?.uuid === target.actor.uuid
-    && appliedDamage.isHealing === false
+    && typeof appliedDamage.isHealing === "boolean"
     && Array.isArray(appliedDamage.updates)
     && appliedDamage.updates.every((update) => (
       TARGET_HELPER_DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
@@ -1935,7 +2036,7 @@ function isValidAppliedDamage(appliedDamage, target) {
 
 function getAppliedDamageAmount(appliedDamage) {
   if (!Array.isArray(appliedDamage?.updates)) return 0;
-  return Math.max(0, appliedDamage.updates.reduce(
+  return Math.abs(appliedDamage.updates.reduce(
     (total, update) => total + (TARGET_HELPER_DAMAGE_UPDATE_PATHS.has(update?.path) && Number.isFinite(update?.value)
       ? update.value
       : 0),
@@ -1946,6 +2047,7 @@ function getAppliedDamageAmount(appliedDamage) {
 async function applyDamage(message, token, multiplier, renderResult = true) {
   const roll = message.rolls.at(0);
   if (!token.actor || typeof roll?.alter !== "function") return false;
+  const isHealing = multiplier < 0;
   const privateNpcResult = token.actor.isOfType("npc");
   if (
     (
@@ -2041,10 +2143,10 @@ async function applyDamage(message, token, multiplier, renderResult = true) {
     const removeCaptureDamageMessage = addPreCreateChatMessageHook(captureDamageMessage);
     try {
       await contextClone.applyDamage({
-        damage: roll.alter(multiplier, 0),
+        damage: isHealing ? multiplier * roll.total : roll.alter(multiplier, 0),
         token,
         item,
-        skipIWR: multiplier === 0,
+        skipIWR: multiplier <= 0,
         rollOptions,
         outcome: context?.outcome
       });
@@ -2071,11 +2173,11 @@ async function applyDamage(message, token, multiplier, renderResult = true) {
     if (!submitted && !rollbackAttempted && damageResult) {
       await rollbackDamageResult(token.actor, damageResult);
     }
-    console.error(`${MODULE_ID} | Failed to apply Target Helper damage`, error);
+    console.error(`${MODULE_ID} | Failed to apply Target Helper ${isHealing ? "healing" : "damage"}`, error);
     ui.notifications.error(
       damageResult
-        ? "DAAVY_ADDONS.TargetHelper.DamageResultError"
-        : "DAAVY_ADDONS.TargetHelper.ApplyError",
+        ? `DAAVY_ADDONS.TargetHelper.${isHealing ? "HealingResultError" : "DamageResultError"}`
+        : `DAAVY_ADDONS.TargetHelper.${isHealing ? "ApplyHealingError" : "ApplyError"}`,
       { localize: true }
     );
     return false;
@@ -2142,7 +2244,7 @@ async function undoDamage(message, token) {
   if (
     !(game.user.isGM || token.isOwner)
     || !stored
-    || !isValidDamageResult(stored, token)
+    || !isValidDamageResult(stored, token, message)
   ) {
     return false;
   }
@@ -2155,8 +2257,12 @@ async function undoDamage(message, token) {
     emitTargetHelperRequest(TARGET_HELPER_DAMAGE_UNDO_REQUEST, message, token);
     return true;
   } catch (error) {
-    console.error(`${MODULE_ID} | Failed to undo Target Helper damage`, error);
-    ui.notifications.error("DAAVY_ADDONS.TargetHelper.UndoError", { localize: true });
+    const isHealing = stored.multiplier < 0;
+    console.error(`${MODULE_ID} | Failed to undo Target Helper ${isHealing ? "healing" : "damage"}`, error);
+    ui.notifications.error(
+      `DAAVY_ADDONS.TargetHelper.${isHealing ? "UndoHealingError" : "UndoError"}`,
+      { localize: true }
+    );
     return false;
   }
 }
@@ -2171,6 +2277,26 @@ async function finalizeDamageUndo(parentMessage, token, result, render = true) {
     [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.damageResults`]: remaining
   }, { render });
   return true;
+}
+
+async function revertDamageResults(message, results, errorMessage) {
+  let reverted = true;
+  for (const result of [...(results ?? [])].reverse()) {
+    const target = resolveTarget(result?.targetUuid);
+    try {
+      if (
+        !target?.actor
+        || !isValidDamageResult(result, target, message)
+        || !await finalizeDamageUndo(message, target, result, false)
+      ) {
+        reverted = false;
+      }
+    } catch (error) {
+      reverted = false;
+      console.error(`${MODULE_ID} | ${errorMessage}`, error);
+    }
+  }
+  return reverted;
 }
 
 async function extractEphemeralEffects({ origin, target, item, options }) {

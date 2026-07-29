@@ -1,13 +1,12 @@
 import {
   MODULE_ID,
-  REACH_CONTROL_RANGE_FLAG,
-  REACH_CONTROL_WRAPPER_MARK,
   REACH_RANGE,
   REACH_TYPES,
   SETTINGS
 } from "../constants.js";
 import { getSetting } from "../utils.js";
 
+const REACH_CONTROL_RANGE_FLAG = "reachControlRange";
 let pendingTokenInteraction = null;
 
 export function registerReachControlHooks() {
@@ -73,11 +72,9 @@ function createTokenDoubleClickWrapper(original) {
 
 function wrapMethod(prototype, methodName, createWrapper) {
   const original = prototype?.[methodName];
-  if (typeof original !== "function" || original[REACH_CONTROL_WRAPPER_MARK]) return;
+  if (typeof original !== "function") return;
 
-  const wrapped = createWrapper(original);
-  Object.defineProperty(wrapped, REACH_CONTROL_WRAPPER_MARK, { value: true });
-  prototype[methodName] = wrapped;
+  prototype[methodName] = createWrapper(original);
 }
 
 function handleStairwayTeleport(data) {
@@ -105,14 +102,12 @@ function addPerObjectRangeField(app, html) {
   ) return;
   if (html.querySelector("[data-reach-control-range]")) return;
 
-  const input = html.ownerDocument.createElement("input");
-  input.type = "number";
-  input.name = `flags.${MODULE_ID}.${REACH_CONTROL_RANGE_FLAG}`;
-  input.value = String(Number(document.getFlag?.(MODULE_ID, REACH_CONTROL_RANGE_FLAG)) || 0);
-  input.min = String(REACH_RANGE.min);
-  input.max = String(REACH_RANGE.max);
-  input.step = String(REACH_RANGE.step);
-  input.dataset.dtype = "Number";
+  const input = foundry.applications.fields.createNumberInput({
+    name: `flags.${MODULE_ID}.${REACH_CONTROL_RANGE_FLAG}`,
+    value: Number(document.getFlag?.(MODULE_ID, REACH_CONTROL_RANGE_FLAG)) || 0,
+    ...REACH_RANGE,
+    dataset: { dtype: "Number" }
+  });
 
   const group = foundry.applications.fields.createFormGroup({
     input,

@@ -1,9 +1,7 @@
-import {
-  FEEDBACK_ACTIONS_CLASS,
-  FEEDBACK_I18N_PREFIX,
-  MODULE_ID
-} from "./constants.js";
+import { MODULE_ID } from "./constants.js";
 
+const FEEDBACK_ACTIONS_CLASS = "daavy-addons-settings-actions";
+const FEEDBACK_I18N_PREFIX = "DAAVY_ADDONS.Feedback";
 const FEEDBACK_ENDPOINT = "https://feedback.daavyc.workers.dev";
 const FEEDBACK_TEMPLATE = `modules/${MODULE_ID}/templates/feedback.hbs`;
 const DONATE_URL = "https://ko-fi.com/daavy";

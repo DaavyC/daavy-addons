@@ -174,6 +174,13 @@ button.daavy-addons-target-helper-action {
   line-height: 1;
 }
 
+button.daavy-addons-target-helper-action.healing > .fa-stack {
+  font-size: 0.5em;
+  height: 2em;
+  line-height: 2em;
+  width: 2em;
+}
+
 button.daavy-addons-target-helper-action.recommended {
   outline: 2px solid var(--color-warm-2);
   outline-offset: -2px;
@@ -313,6 +320,7 @@ button:is(
 
 .daavy-addons-target-helper-save-label {
   border-right: 2px groove white;
+  margin-right: calc(var(--space-4) - 1px);
   padding: 0 var(--space-4) 0 0;
 }
 
@@ -335,6 +343,10 @@ button:is(
 
 .daavy-addons-target-helper-save-result.criticalSuccess {
   color: var(--color-pf-text-critical-success);
+}
+
+.daavy-addons-target-helper-save-result.healing {
+  color: rgb(255, 105, 180);
 }
 
 .daavy-addons-target-helper-save-result.hidden-result {

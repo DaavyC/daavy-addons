@@ -41,6 +41,70 @@ export function registerSettings() {
   }
 }
 
+export async function checkIncompatibleSettings() {
+  if (!game.user.isActiveGM || getSetting(SETTINGS.TARGET_HELPER) !== true) return;
+
+  const conflicts = [
+    externalSettingMatches("pf2e-toolbelt", "targetHelper.enabled", (value) => value === true) && {
+      namespace: "pf2e-toolbelt",
+      key: "targetHelper.enabled",
+      value: false,
+      label: "Toolbelt"
+    },
+    (
+      getSetting(SETTINGS.TARGET_HELPER_AUTOMATIONS) === true
+      && externalSettingMatches(
+        "xdy-pf2e-workbench",
+        "autoRollDamageAllow",
+        (value) => value !== "none"
+      )
+    ) && {
+      namespace: "xdy-pf2e-workbench",
+      key: "autoRollDamageAllow",
+      value: "none",
+      label: "Workbench"
+    }
+  ].filter(Boolean);
+  if (!conflicts.length) return;
+
+  const i18n = "DAAVY_ADDONS.Settings.Incompatibilities";
+  try {
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize(`${i18n}.Title`) },
+      content: `
+        <p>${game.i18n.localize(`${i18n}.Content`)}</p>
+        <ul>${conflicts.map(({ label }) => `<li>${game.i18n.localize(`${i18n}.${label}`)}</li>`).join("")}</ul>
+      `,
+      yes: { label: game.i18n.localize(`${i18n}.Disable`) },
+      no: { label: game.i18n.localize(`${i18n}.Cancel`) },
+      rejectClose: false,
+      modal: true
+    });
+    if (!confirmed) return;
+
+    const results = await Promise.allSettled(
+      conflicts.map(({ namespace, key, value }) => game.settings.set(namespace, key, value))
+    );
+    let failures = 0;
+    results.forEach((result, index) => {
+      if (result.status === "rejected") {
+        failures += 1;
+        const { namespace, key } = conflicts[index];
+        console.error(`${MODULE_ID} | Failed to disable incompatible setting ${namespace}.${key}`, result.reason);
+      }
+    });
+    if (failures) {
+      ui.notifications.error(game.i18n.localize(`${i18n}.Error`));
+    }
+    if (failures < results.length) {
+      await foundry.applications.settings.SettingsConfig.reloadConfirm({ world: true });
+    }
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to resolve incompatible settings`, error);
+    ui.notifications.error(game.i18n.localize(`${i18n}.Error`));
+  }
+}
+
 export function organizeSettingsConfig(html) {
   if (!html || html.querySelector('[data-settings-group="Features"]')) return;
 
@@ -140,4 +204,10 @@ function findSettingRow(container, key) {
   return container.querySelector(`[data-setting-id="${settingId}"]`)?.closest(".form-group")
     ?? container.querySelector(`[id$="${settingId}"]`)?.closest(".form-group")
     ?? null;
+}
+
+function externalSettingMatches(namespace, key, predicate) {
+  return game.modules.get(namespace)?.active === true
+    && game.settings.settings.has(`${namespace}.${key}`)
+    && predicate(game.settings.get(namespace, key));
 }

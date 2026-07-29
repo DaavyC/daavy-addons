@@ -6,7 +6,11 @@ import {
   createTargetHelperMessage,
   registerTargetHelperHooks
 } from "./features/target-helper.js";
-import { organizeSettingsConfig, registerSettings } from "./settings.js";
+import {
+  checkIncompatibleSettings,
+  organizeSettingsConfig,
+  registerSettings
+} from "./settings.js";
 
 Hooks.on("renderSettingsConfig", (_app, html) => {
   organizeSettingsConfig(html);
@@ -22,6 +26,8 @@ Hooks.once("init", () => {
     }
   };
 });
+
+Hooks.once("ready", checkIncompatibleSettings);
 
 registerReachControlHooks();
 registerTargetHelperHooks();
