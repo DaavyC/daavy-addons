@@ -239,6 +239,18 @@ button.daavy-addons-target-helper-save {
   white-space: nowrap;
 }
 
+.daavy-addons-target-helper-damage-amount.damage {
+  color: #ff0000;
+}
+
+.daavy-addons-target-helper-damage-amount.healing {
+  color: #008000;
+}
+
+.daavy-addons-target-helper-damage-amount.zero {
+  color: var(--color-text-subtle, #999);
+}
+
 button:is(
   .daavy-addons-target-helper-undo,
   .daavy-addons-target-helper-hero-reroll,
