@@ -1,7 +1,7 @@
 {
   "id": "daavy-addons",
   "title": "Daavy's Addons",
-  "description": "<p>This module includes standalone features and integrations that do not require dedicated modules.</p>",
+  "description": "<p>This module contains features that don't need dedicated modules.</p>",
   "version": "1.2.0",
   "authors": [
     {

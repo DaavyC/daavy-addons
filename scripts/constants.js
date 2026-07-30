@@ -3,6 +3,7 @@ export const MODULE_ID = "daavy-addons";
 export const SETTINGS = {
   TARGET_HELPER: "targetHelper",
   TARGET_HELPER_AUTOMATIONS: "targetHelperAutomations",
+  TARGET_HELPER_AUTOMATIONS_NPC_ONLY: "targetHelperAutomationsNpcOnly",
   REACH_CONTROL: "reachControl",
   REACH_DOORS: "reachControlDoors",
   REACH_DOOR_RANGE: "reachControlDoorRange",

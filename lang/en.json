@@ -7,26 +7,33 @@
         "ReachControl": "Reach Control"
       },
       "Sections": {
+        "Automations": "Automations",
         "Doors": "Doors",
         "Stairways": "Stairways",
         "Tokens": "Tokens"
       },
       "TargetHelper": {
         "Name": "Target Helper",
-        "Hint": "Add target damage and saving throw controls to Pathfinder 2e chat cards.",
+        "Hint": "Adds target controls to supported PF2e chat cards.",
         "Automations": {
-          "Name": "Automations",
-          "Hint": "Automatically roll supported damage and basic saves, then apply damage to targets. Requires an active GM."
+          "Enabled": {
+            "Name": "Enable automation",
+            "Hint": "Automatically rolls saves and damage, then applies the results. Requires an active GM."
+          },
+          "NpcOnly": {
+            "Name": "NPCs only",
+            "Hint": "Only automates actions made by NPCs."
+          }
         }
       },
       "Incompatibilities": {
-        "Title": "Incompatible module settings",
-        "Content": "These settings conflict with Daavy's Addons. Disable them now?",
-        "Toolbelt": "Target Helper from PF2e Toolbelt",
-        "Workbench": "Autoroll damage permission from PF2e Workbench",
-        "Disable": "Disable incompatible settings",
+        "Title": "Conflicting settings",
+        "Content": "Some module settings conflict with Daavy's Addons. Disable them?",
+        "Toolbelt": "PF2e Toolbelt: Target Helper",
+        "Workbench": "PF2e Workbench: automatic damage roll permission",
+        "Disable": "Disable settings",
         "Cancel": "Cancel",
-        "Error": "Some incompatible settings could not be disabled."
+        "Error": "Some settings could not be disabled."
       },
       "ReachControl": {
         "Name": "Reach Control",
@@ -76,28 +83,28 @@
         "Damage": "Apply damage",
         "Half": "Apply half damage",
         "Double": "Apply double damage",
-        "Block": "Apply zero damage",
+        "Block": "Apply no damage",
         "Healing": "Apply healing"
       },
-      "ApplyError": "Unable to apply damage to this target.",
-      "ApplyHealingError": "Unable to apply healing to this target.",
-      "DamageResultError": "Unable to store this damage result. Applied damage was reverted.",
-      "HealingResultError": "Unable to store this healing result. Applied healing was reverted.",
-      "AddTargets": "Add current targets",
-      "ClearTargets": "Clear targets and revert results",
-      "UndoDamage": "Revert damage",
-      "UndoHealing": "Revert healing",
-      "UndoError": "Unable to revert damage for this target.",
-      "UndoHealingError": "Unable to revert healing for this target.",
+      "ApplyError": "Could not apply damage to this target.",
+      "ApplyHealingError": "Could not apply healing to this target.",
+      "DamageResultError": "Could not record the damage. The damage was undone.",
+      "HealingResultError": "Could not record the healing. The healing was undone.",
+      "AddTargets": "Add selected targets",
+      "ClearTargets": "Clear targets and undo results",
+      "UndoDamage": "Undo damage",
+      "UndoHealing": "Undo healing",
+      "UndoError": "Could not undo damage for this target.",
+      "UndoHealingError": "Could not undo healing for this target.",
       "HealingResult": "Healing",
-      "WaitingVariant": "Waiting for variant...",
-      "RollSave": "Roll Save",
-      "RemoveTarget": "Remove Target",
-      "ResetSaveResult": "Reset Save Result",
-      "HiddenResult": "Result Hidden",
-      "NoActiveGM": "An active GM is required for this action.",
-      "SaveError": "Unable to roll this target's saving throw.",
-      "AutomationError": "Target Helper automation could not be completed. Manual controls remain available."
+      "WaitingVariant": "Waiting for a variant...",
+      "RollSave": "Roll save",
+      "RemoveTarget": "Remove target",
+      "ResetSaveResult": "Reset save",
+      "HiddenResult": "Hidden result",
+      "NoActiveGM": "An active GM is required.",
+      "SaveError": "Could not roll this target's save.",
+      "AutomationError": "Automation failed. Manual controls are still available."
     },
     "ReachControl": {
       "Placeables": {
@@ -116,7 +123,7 @@
       }
     },
     "Feedback": {
-      "MenuLabel": "Send Feedback",
+      "MenuLabel": "Send feedback",
       "MenuHint": "Send anonymous feedback about Daavy's Addons.",
       "Category": "Category",
       "Categories": {
@@ -124,12 +131,12 @@
         "Suggestion": "Suggestion"
       },
       "Message": "Message",
-      "MessageHint": "Describe your feedback without including personal or private information.",
+      "MessageHint": "Describe the issue or suggestion. Do not include personal information.",
       "Cancel": "Cancel",
-      "Send": "Send Feedback",
-      "Invalid": "Choose a category and enter a message of up to 3,000 characters.",
-      "Success": "Feedback sent. Thank you!",
-      "Error": "Unable to send feedback. Please try again later."
+      "Send": "Send feedback",
+      "Invalid": "Choose a category and enter up to 3,000 characters.",
+      "Success": "Feedback sent. Thank you.",
+      "Error": "Could not send feedback. Try again later."
     },
     "Donate": {
       "Label": "Donate"

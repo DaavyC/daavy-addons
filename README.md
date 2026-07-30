@@ -1,6 +1,6 @@
 # 🎯 Daavy's Addons
 
-This module includes standalone features and integrations that do not require dedicated modules.
+This module contains features that don't need dedicated modules.
 
 ---
 
@@ -10,15 +10,16 @@ This module includes standalone features and integrations that do not require de
 
 ## 🗂️ Features
 
-- **🎯 Target Helper (PF2e)** — Adds manual target controls with optional save, damage roll, and damage application automations.
+- **🎯 Target Helper (PF2e)** — Adds target controls and optional automation for saves, damage, and healing.
 - **🖐️ Reach Control** — Limits door, Stairways, and token interactions by distance in grid squares.
 
 ---
 
 ## ⚙️ Settings
 
-- **Target Helper** — Enables target controls.
-- **Target Helper → Automations** — Enables automatic rolls and damage application. Requires an active GM.
+- **Target Helper** — Shows target controls on supported PF2e chat cards.
+- **Target Helper → Automations** — Automatically rolls saves and damage, then applies the results. Requires an active GM.
+- **Target Helper → Automations → NPCs only** — Only automates actions made by NPCs.
 - **Reach Control** — Enables range limits and per-placeable integrations.
 
 ---
@@ -36,4 +37,4 @@ This module includes standalone features and integrations that do not require de
 
 ---
 
-> This module was built with AI-assisted development.
+> Built with AI-assisted development.

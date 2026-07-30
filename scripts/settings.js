@@ -12,7 +12,11 @@ const SETTING_DEFINITIONS = {
     defaultValue: false
   },
   [SETTINGS.TARGET_HELPER_AUTOMATIONS]: {
-    label: "TargetHelper.Automations",
+    label: "TargetHelper.Automations.Enabled",
+    defaultValue: false
+  },
+  [SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY]: {
+    label: "TargetHelper.Automations.NpcOnly",
     defaultValue: false
   },
   [SETTINGS.REACH_CONTROL]: { label: "ReachControl", defaultValue: false },
@@ -122,8 +126,20 @@ export function organizeSettingsConfig(html) {
   if (automationRow) {
     const targetHelperGroup = createGroup(documentRef, "TargetHelper");
     appendRows(targetHelperGroup, [automationRow]);
+    const npcOnlyRow = findSettingRow(html, SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY);
+    const automationSection = npcOnlyRow ? documentRef.createElement("section") : null;
+    if (automationSection) {
+      const title = documentRef.createElement("h4");
+      automationSection.className = "daavy-addons-settings-section";
+      title.className = "daavy-addons-settings-section-title";
+      title.textContent = game.i18n.localize("DAAVY_ADDONS.Settings.Sections.Automations");
+      automationSection.appendChild(title);
+      appendRows(automationSection, [npcOnlyRow]);
+      targetHelperGroup.appendChild(automationSection);
+    }
     featuresGroup.after(targetHelperGroup);
     configureVisibility(html, SETTINGS.TARGET_HELPER, [targetHelperGroup]);
+    configureVisibility(html, SETTINGS.TARGET_HELPER_AUTOMATIONS, [automationSection]);
   }
 
   const sectionRows = Object.fromEntries(
