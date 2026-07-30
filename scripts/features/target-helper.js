@@ -10,12 +10,13 @@ const TARGET_HELPER_DAMAGE_UNDO_REQUEST = "targetHelperDamageUndo";
 const TARGET_HELPER_SAVE_RESULT_FLAG = "targetHelperSaveResult";
 const TARGET_HELPER_TARGETS_REQUEST = "targetHelperTargets";
 const TARGET_HELPER_SOCKET = `module.${MODULE_ID}`;
-const TARGET_HELPER_SAVE_OUTCOMES = [
-  "criticalFailure",
-  "failure",
-  "success",
-  "criticalSuccess"
-];
+const TARGET_HELPER_BASIC_SAVE_MULTIPLIERS = {
+  criticalFailure: 2,
+  failure: 1,
+  success: 0.5,
+  criticalSuccess: 0
+};
+const TARGET_HELPER_SAVE_OUTCOMES = Object.keys(TARGET_HELPER_BASIC_SAVE_MULTIPLIERS);
 const TARGET_HELPER_DAMAGE_UPDATE_PATHS = new Set([
   "system.attributes.hp.temp",
   "system.attributes.hp.sp.value",
@@ -33,12 +34,6 @@ const TARGET_HELPER_ACTIONS = [
     multiplier: -1
   }
 ];
-const TARGET_HELPER_BASIC_SAVE_MULTIPLIERS = {
-  criticalFailure: 2,
-  failure: 1,
-  success: 0.5,
-  criticalSuccess: 0
-};
 let automationQueue = Promise.resolve();
 let pendingDamageAutomation = null;
 
@@ -60,7 +55,7 @@ export async function createTargetHelperMessage(data, { targets, automate = fals
 }
 
 export async function automateTargetHelperMessage(message, { targets } = {}) {
-  if (message?.documentName !== "ChatMessage" || !canUseTargetHelperAutomations(message)) return false;
+  if (message?.documentName !== "ChatMessage" || !canUseTargetHelperAutomations()) return false;
 
   const data = prepareTargetHelperData(message, normalizeTargetUuids(targets), {
     automate: true,
@@ -81,7 +76,7 @@ export async function automateTargetHelperMessage(message, { targets } = {}) {
 
 export function registerTargetHelperHooks() {
   addPreCreateChatMessageHook(captureTargets);
-  Hooks.on("preUpdateChatMessage", prepareHealHarmVariant);
+  Hooks.on("preUpdateChatMessage", prepareHealingSpellVariant);
   Hooks.on("createChatMessage", (message, options) => {
     const link = message.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
     if (link && options?.render !== false) void refreshRelatedMessages(message);
@@ -94,24 +89,28 @@ export function registerTargetHelperHooks() {
     void refreshLinkedDamageHelpers(message, changes);
     const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
     if (game.user.isActiveGM && data?.variantChanged) {
-      queueAutomation(() => reconcileHealHarmVariantChange(message));
+      queueAutomation(() => reconcileHealingSpellVariantChange(message));
       return;
     }
     const saveResultsPath = `flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.saveResults`;
+    const saveResultsChanged = (
+      Object.hasOwn(changes, saveResultsPath)
+      || foundry.utils.hasProperty(changes, saveResultsPath)
+    );
     if (
       game.user.isActiveGM
-      && canUseTargetHelperAutomations(message)
-      && data?.automation?.status === "complete"
-      && (
-        Object.hasOwn(changes, saveResultsPath)
-        || foundry.utils.hasProperty(changes, saveResultsPath)
-      )
+      && canUseTargetHelperAutomations()
+      && saveResultsChanged
     ) {
-      for (const result of message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.saveResults ?? []) {
-        const link = game.messages
-          .get(result?.resultMessageId)
-          ?.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
-        if (link) queueAutomation(() => reconcileAutomatedSaveDamage(link));
+      if (data?.automation?.status === "waiting-saves") {
+        queueTargetHelperAutomation(message);
+      } else if (data?.automation?.status === "complete") {
+        for (const result of data.saveResults ?? []) {
+          const link = game.messages
+            .get(result?.resultMessageId)
+            ?.getFlag(MODULE_ID, TARGET_HELPER_SAVE_RESULT_FLAG);
+          if (link) queueAutomation(() => reconcileAutomatedSaveDamage(link));
+        }
       }
     }
     const automationPath = `flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`;
@@ -160,7 +159,7 @@ function captureTargets(message, _data, options, userId) {
       ?? message.actor?.getActiveTokens(true, true).at(0);
     if (speakerToken) targets = [speakerToken.uuid];
   }
-  const automate = canUseTargetHelperAutomations(message)
+  const automate = canUseTargetHelperAutomations()
     && (request ? request.automate === true : true);
   const data = prepareTargetHelperData(message, targets, {
     automate,
@@ -197,13 +196,14 @@ function prepareTargetHelperData(
   { automate = false, automateDamage = false, pending = null } = {}
 ) {
   if (message.flags?.pf2e?.context?.type === "damage-taken") return null;
-  if (isPendingHealHarmVariant(message)) return { targets, variantPending: true };
+  if (isPendingHealingSpellVariant(message)) return { targets, variantPending: true };
 
   if (isSupportedDamageRoll(message)) {
     const saveMessage = pending?.type === "basic-save"
       ? game.messages.get(pending.sourceMessageId)
       : findBasicSaveMessage(message);
-    const automateHealing = automate && targets.length && isHealingOnlyDamageRoll(message);
+    const automateRoll = automate && canAutomateActor(message.actor);
+    const automateHealing = automateRoll && targets.length && isHealingOnlyDamageRoll(message);
     const automation = pending
       ? {
           type: pending.type,
@@ -212,7 +212,7 @@ function prepareTargetHelperData(
           ...(pending.outcome ? { outcome: pending.outcome } : {}),
           ...(pending.pendingTargets ? { pendingTargets: pending.pendingTargets } : {})
         }
-      : automate && (automateDamage || automateHealing)
+      : automateRoll && (automateDamage || automateHealing)
         ? {
             type: automateHealing ? "healing" : "attack",
             sourceMessageId: message.id,
@@ -231,17 +231,21 @@ function prepareTargetHelperData(
   if (attackTarget) {
     return {
       targets: [attackTarget.uuid],
-      ...(automate ? { automation: { type: "attack", status: "pending" } } : {})
+      ...(automate && canAutomateActor(message.actor)
+        ? { automation: { type: "attack", status: "pending" } }
+        : {})
     };
   }
 
   const save = getStructuredSave(message);
   if (!save) {
-    return isHealHarmSpell(message)
+    return isHealingSpell(message)
       ? {
           targets,
           directSpell: true,
-          ...(automate ? { automation: { type: "direct-spell", status: "pending" } } : {})
+          ...(automate && canAutomateActor(message.actor)
+            ? { automation: { type: "direct-spell", status: "pending" } }
+            : {})
         }
       : null;
   }
@@ -251,17 +255,22 @@ function prepareTargetHelperData(
     save,
     saveResults: [],
     ...(automate && isBasicSave(save)
-      ? { automation: { type: "basic-save", status: "pending" } }
+      ? {
+          automation: {
+            type: "basic-save",
+            status: "pending"
+          }
+        }
       : {})
   };
 }
 
-function prepareHealHarmVariant(message, changes, _options, userId) {
+function prepareHealingSpellVariant(message, changes, _options, userId) {
   const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
   if (
     userId !== game.user.id
     || !current
-    || !isHealHarmSpell(message)
+    || !isHealingSpell(message)
     || !Object.hasOwn(changes, "content")
   ) {
     return;
@@ -275,7 +284,7 @@ function prepareHealHarmVariant(message, changes, _options, userId) {
     && previousOverlays.join() !== nextOverlays.join()
   );
   const prepared = prepareTargetHelperData(updated, current.targets, {
-    automate: canUseTargetHelperAutomations(updated)
+    automate: canUseTargetHelperAutomations()
   });
   if (!prepared) return;
   prepared.variantPending ??= false;
@@ -300,9 +309,9 @@ function prepareHealHarmVariant(message, changes, _options, userId) {
   });
 }
 
-async function reconcileHealHarmVariantChange(message) {
+async function reconcileHealingSpellVariantChange(message) {
   const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-  if (!data?.variantChanged || !isHealHarmSpell(message)) return;
+  if (!data?.variantChanged || !isHealingSpell(message)) return;
 
   const damageMessage = findAutomatedDamageMessage(message.id, data.automation?.damageMessageId)
     ?? game.messages.contents.findLast((candidate) => (
@@ -316,7 +325,7 @@ async function reconcileHealHarmVariantChange(message) {
     && !await revertDamageResults(
       damageMessage,
       damageResults,
-      "Failed to revert changed Heal/Harm variant"
+      "Failed to revert changed healing spell variant"
     )
   ) {
     await message.update({
@@ -371,15 +380,6 @@ function queueTargetHelperAutomation(message) {
   }
   const automation = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation;
   if (!automation || !canUseTargetHelperAutomations()) return;
-  if (!canUseTargetHelperAutomations(message)) {
-    if (
-      game.user.isActiveGM
-      && !["complete", "failed", "manual"].includes(automation.status)
-    ) {
-      void updateAutomationState(message, { status: "manual" });
-    }
-    return;
-  }
 
   if (!game.users.activeGM) {
     if (message.isAuthor && automation.status === "pending") {
@@ -402,7 +402,7 @@ function resumeTargetHelperAutomations() {
   if (!game?.user?.isActiveGM || !canUseTargetHelperAutomations()) return;
   for (const message of game.messages.contents) {
     const status = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status;
-    if (["pending", "reroll-pending", "rolling-saves", "rolling-damage", "applying"].includes(status)) {
+    if (["pending", "reroll-pending", "waiting-saves", "rolling-saves", "rolling-damage", "applying"].includes(status)) {
       queueTargetHelperAutomation(message);
     }
   }
@@ -419,7 +419,7 @@ async function runTargetHelperAutomation(message) {
   ) {
     return;
   }
-  if (!canUseTargetHelperAutomations(message)) {
+  if (automation.type !== "basic-save" && !canAutomateActor(message.actor)) {
     await updateAutomationState(message, { status: "manual" });
     return;
   }
@@ -450,6 +450,11 @@ async function automateSource(message, data) {
   const automationTargets = pendingTargetUuids
     ? targets.filter((target) => pendingTargetUuids.has(target.uuid))
     : targets;
+  const npcOnly = getSetting(SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY) === true;
+  const automaticSaveTargets = type === "basic-save" && npcOnly
+    ? automationTargets.filter((target) => canAutomateActor(target.actor))
+    : automationTargets;
+  const rollTargetUuids = pendingTargetUuids ? [...pendingTargetUuids] : null;
   if (
     !targets.length
     || (
@@ -457,7 +462,7 @@ async function automateSource(message, data) {
         ? !getAutomatedAttackTarget(message, true)
         : type === "basic-save"
           ? !isValidSave(data.save)
-          : !isHealHarmSpell(message) || isPendingHealHarmVariant(message)
+          : !isHealingSpell(message) || isPendingHealingSpellVariant(message)
     )
   ) {
     await updateAutomationState(message, { status: "manual" });
@@ -475,10 +480,13 @@ async function automateSource(message, data) {
     await updateAutomationState(message, { status: "rolling-saves" }, false);
     const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
     const saveTargets = automationTargets.filter((target) => (
-      getSaveApplicationKind(message, target) !== "healing"
+      getSpellApplicationKind(message, target) !== "healing"
     ));
     const existingResults = indexSaveResultMessages(message, saveTargets, current);
-    const pendingTargets = saveTargets.filter((target) => !existingResults.has(target.uuid));
+    const pendingTargets = automaticSaveTargets.filter((target) => (
+      getSpellApplicationKind(message, target) !== "healing"
+      && !existingResults.has(target.uuid)
+    ));
     const [resolvedItem, resolvedOrigin] = pendingTargets.length
       ? await Promise.all([
         resolveUuid(current.save.itemUuid),
@@ -516,15 +524,26 @@ async function automateSource(message, data) {
     }))).flat();
     const successfulResults = rolledResults.filter((result) => result.resultMessage);
     const rollsComplete = successfulResults.length === pendingTargets.length;
+    const completedTargets = new Set([
+      ...existingResults.keys(),
+      ...successfulResults.map((result) => result.targetUuid)
+    ]);
+    const savesComplete = saveTargets.every((target) => completedTargets.has(target.uuid));
+    const rollDamage = canAutomateActor(message.actor);
     await storeAutomatedSaveResults(
       message,
       successfulResults,
-      rollsComplete ? "rolling-damage" : "failed"
+      !rollsComplete
+        ? "failed"
+        : !savesComplete
+          ? "waiting-saves"
+          : rollDamage ? "rolling-damage" : "manual"
     );
     if (!rollsComplete) {
       ui.notifications.error("DAAVY_ADDONS.TargetHelper.AutomationError", { localize: true });
       return;
     }
+    if (!savesComplete || !rollDamage) return;
   }
 
   if (existing) {
@@ -537,7 +556,7 @@ async function automateSource(message, data) {
         [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.automation`]: {
           ...existingData.automation,
           status: "pending",
-          pendingTargets: pendingTargetUuids ? [...pendingTargetUuids] : null
+          pendingTargets: rollTargetUuids
         }
       }, { render: false }),
       updateAutomationState(message, {
@@ -556,7 +575,7 @@ async function automateSource(message, data) {
     message,
     targets,
     type,
-    pendingTargetUuids ? [...pendingTargetUuids] : null
+    rollTargetUuids
   );
   await updateAutomationState(message, damageMessage
     ? { status: "rolling-damage", damageMessageId: damageMessage.id }
@@ -669,6 +688,8 @@ async function applyAutomatedDamage(message, data) {
       complete = false;
       continue;
     }
+    if (!canAutomateActor(target.actor)) continue;
+
     const existingResult = findDamageResult(message, target.uuid);
     if (existingResult) {
       applications.push({ target, multiplier: null });
@@ -786,12 +807,6 @@ async function reconcileAutomatedSaveDamage(link) {
 
   const sourceMessage = game.messages.get(link.parentMessageId);
   const sourceData = sourceMessage?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-  if (!canUseTargetHelperAutomations(sourceMessage)) {
-    if (sourceData?.automation) {
-      await updateAutomationState(sourceMessage, { status: "manual" });
-    }
-    return;
-  }
   const damageMessage = findAutomatedDamageMessage(
     sourceMessage?.id,
     sourceData?.automation?.damageMessageId
@@ -802,6 +817,7 @@ async function reconcileAutomatedSaveDamage(link) {
     || !sourceData.targets?.includes(link.targetUuid)
     || !damageMessage
     || !target?.actor
+    || !canAutomateActor(target.actor)
   ) {
     return;
   }
@@ -915,13 +931,13 @@ function renderTargetHelper(message, html) {
 
   renderAttackHeroPointReroll(message, html);
   const data = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-  if (data?.variantPending || isPendingHealHarmVariant(message)) {
+  if (data?.variantPending || isPendingHealingSpellVariant(message)) {
     renderTargetCard(message, html, data, false);
     return;
   }
   if (
-    isHealHarmSpell(message)
-    && canUseTargetHelperAutomations(message)
+    isHealingSpell(message)
+    && canAutomateActor(message.actor)
     && data?.automation
     && !["failed", "manual"].includes(data.automation.status)
   ) {
@@ -940,7 +956,7 @@ function renderAttackHeroPointReroll(message, root) {
   const total = root.querySelector(".dice-total");
   const automationStatus = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG)?.automation?.status;
   const canReroll = (
-    canUseTargetHelperAutomations(message)
+    canAutomateActor(actor)
     && isSupportedAttackRoll(message)
     && target?.actor
     && actor?.isOfType("character")
@@ -989,7 +1005,9 @@ function renderTargetCard(message, root, data, damage) {
       && (!damage || game.user.isGM || !token.actor?.isOfType("npc"))
     ));
 
-  const saveResultMessages = damage ? null : indexSaveResultMessages(message, targets, data);
+  const saveResultMessages = !damage && isValidSave(data.save)
+    ? indexSaveResultMessages(message, targets, data)
+    : null;
   const card = document.createElement("section");
   card.className = "daavy-addons-target-helper";
   if (controls && !footer) card.append(controls);
@@ -1001,7 +1019,7 @@ function renderTargetCard(message, root, data, damage) {
   for (const target of targets) {
     card.append(damage
       ? createDamageRow(message, target, data)
-      : createSaveRow(message, target, data, saveResultMessages.get(target.uuid) ?? null));
+      : createSaveRow(message, target, data, saveResultMessages?.get(target.uuid) ?? null));
   }
   if (!damage && game.user.isGM) {
     new foundry.applications.ux.ContextMenu(card, ".daavy-addons-target-helper-save-result[data-target-uuid]", [
@@ -1015,7 +1033,10 @@ function renderTargetCard(message, root, data, damage) {
       {
         label: "DAAVY_ADDONS.TargetHelper.ResetSaveResult",
         icon: "fa-solid fa-rotate-left",
-        visible: (target) => !target.classList.contains("healing"),
+        visible: (target) => (
+          !target.classList.contains("healing")
+          && !target.classList.contains("damage")
+        ),
         onClick: (_event, target) => {
           void requestTargetHelperTargetChange(message, "reset", [target.dataset.targetUuid]);
         }
@@ -1206,45 +1227,40 @@ function getRecommendedApplicationMultiplier(message, token, data) {
   if (hasHealing && !hasDamage) return -1;
 
   if (hasDamage && hasHealing) {
-    const kind = getMixedApplicationKind(roll, token.actor)
-      ?? getSaveApplicationKind(game.messages.get(data?.saveMessageId), token);
+    const kind = getMixedApplicationKind(roll?.instances ?? [], token.actor)
+      ?? getSpellApplicationKind(game.messages.get(data?.saveMessageId), token);
     if (kind === "healing") return -1;
     if (kind !== "damage") return null;
   }
 
-  return data?.automation?.type === "attack"
+  return ["attack", "direct-spell"].includes(data?.automation?.type)
     ? 1
     : getRecommendedDamageMultiplier(message, token, data);
 }
 
-function getMixedApplicationKind(roll, actor) {
-  const instances = roll?.instances ?? [];
+function getMixedApplicationKind(parts, actor) {
   if (
-    !instances.length
-    || !instances.every((instance) => (
-      instance.kinds?.has("damage") === true
-      && instance.kinds.has("healing")
+    !parts.length
+    || !parts.every((part) => (
+      part.kinds?.has("damage") === true
+      && part.kinds.has("healing")
     ))
   ) {
     return null;
   }
 
-  return getEnergyApplicationKind(instances.map((instance) => instance.type), actor);
+  return getEnergyApplicationKind(parts.map((part) => part.type), actor);
 }
 
-function getSaveApplicationKind(message, token) {
-  const damage = Object.values(getSpellLikeItem(message)?.system?.damage ?? {});
-  if (
-    !damage.length
-    || !damage.every((partial) => (
-      partial.kinds?.has("damage") === true
-      && partial.kinds.has("healing")
-    ))
-  ) {
-    return null;
-  }
-
-  return getEnergyApplicationKind(damage.map((partial) => partial.type), token.actor);
+function getSpellApplicationKind(message, token) {
+  const spell = getSpellLikeItem(message);
+  const hasDamage = spell?.damageKinds?.has("damage") === true;
+  const hasHealing = spell?.damageKinds?.has("healing") === true;
+  if (hasHealing && !hasDamage) return "healing";
+  if (hasDamage && !hasHealing) return "damage";
+  return hasDamage && hasHealing
+    ? getMixedApplicationKind(Object.values(spell.system.damage), token.actor)
+    : null;
 }
 
 function getEnergyApplicationKind(damageTypes, actor) {
@@ -1271,7 +1287,9 @@ function createDamageResult(message, token, result) {
   const isHealing = result.multiplier < 0;
   const undoKey = isHealing ? "UndoHealing" : "UndoDamage";
   const button = createIconButton("daavy-addons-target-helper-undo", '<i class="fa-solid fa-rotate-left fa-fw" inert></i>', game.i18n.localize(`DAAVY_ADDONS.TargetHelper.${undoKey}`));
-  const visible = canViewDamageResult(result);
+  const visible = game.user.isGM || (
+    result?.blind !== true && (!result?.whisper?.length || result.whisper.includes(game.user.id))
+  );
   const canUndo = visible && (game.user.isGM || token.isOwner);
 
   container.className = "daavy-addons-target-helper-damage-result";
@@ -1316,16 +1334,6 @@ function createIwrInfo(result) {
   return info;
 }
 
-function canViewDamageResult(result) {
-  return (
-    game.user.isGM
-    || (
-      result?.blind !== true
-      && (!result?.whisper?.length || result.whisper.includes(game.user.id))
-    )
-  );
-}
-
 function isValidIwrApplications(applications) {
   return applications === null || (
     Array.isArray(applications)
@@ -1348,11 +1356,15 @@ function createSaveRow(message, token, data, resultMessage) {
     return row;
   }
 
-  if (data.directSpell === true || getSaveApplicationKind(message, token) === "healing") {
+  const applicationKind = getSpellApplicationKind(message, token);
+  if (data.directSpell === true || applicationKind === "healing") {
     const result = document.createElement("span");
-    result.className = "daavy-addons-target-helper-save-result healing";
+    const kind = applicationKind === "damage" ? "damage" : "healing";
+    result.className = `daavy-addons-target-helper-save-result ${kind}`;
     result.dataset.targetUuid = token.uuid;
-    result.textContent = game.i18n.localize("DAAVY_ADDONS.TargetHelper.HealingResult");
+    result.textContent = game.i18n.localize(
+      `DAAVY_ADDONS.TargetHelper.${kind === "damage" ? "DamageResult" : "HealingResult"}`
+    );
     row.append(result);
     return row;
   }
@@ -1559,16 +1571,19 @@ function canUseTargetHelper() {
   return game.system.id === "pf2e" && getSetting(SETTINGS.TARGET_HELPER) === true;
 }
 
-function canUseTargetHelperAutomations(message = null) {
+function canUseTargetHelperAutomations() {
   return (
     canUseTargetHelper()
     && getSetting(SETTINGS.TARGET_HELPER_AUTOMATIONS) === true
-    && (
-      !message
-      || getSetting(SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY) !== true
-      || message.actor?.isOfType("npc")
-    )
   );
+}
+
+function canAutomateActor(actor) {
+  return canUseTargetHelperAutomations()
+    && (
+      getSetting(SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY) !== true
+      || actor?.isOfType("npc")
+    );
 }
 
 function getAutomatedAttackTarget(message, includeReroll = false) {
@@ -1640,13 +1655,24 @@ function getSpellLikeItem(message) {
   return item.isOfType?.("consumable") ? item.embeddedSpell : null;
 }
 
-function isHealHarmSpell(message) {
-  return ["heal", "harm"].includes(getSpellLikeItem(message)?.slug);
+function isHealingSpell(message) {
+  const spell = getSpellLikeItem(message);
+  return [spell, spell?.original].some((candidate) => (
+    candidate?.damageKinds?.has("healing") === true
+    || Object.values(candidate?.system?.overlays ?? {}).some((overlay) => (
+      Object.values(overlay.system?.damage ?? {}).some((damage) => (
+        damage.kinds?.has?.("healing") === true
+        || damage.kinds?.includes?.("healing") === true
+      ))
+    ))
+  ));
 }
 
-function isPendingHealHarmVariant(message) {
+function isPendingHealingSpellVariant(message) {
+  const spell = getSpellLikeItem(message);
   return (
-    isHealHarmSpell(message)
+    isHealingSpell(message)
+    && spell?.hasVariants === true
     && !message.flags?.pf2e?.origin?.variant?.overlays?.length
   );
 }
@@ -2053,8 +2079,8 @@ async function handleTargetHelperSocket(payload, userId) {
 async function updateTargetHelperTargets(messageId, action, requestedTargets, sender) {
   const message = game.messages.get(messageId);
   const data = message?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
-  const variantPending = data?.variantPending === true && isHealHarmSpell(message);
-  const directSpell = data?.directSpell === true && isHealHarmSpell(message);
+  const variantPending = data?.variantPending === true && isHealingSpell(message);
+  const directSpell = data?.directSpell === true && isHealingSpell(message);
   if (
     !message
     || !["add", "clear", "remove", "reset"].includes(action)
@@ -2119,7 +2145,7 @@ async function updateTargetHelperTargets(messageId, action, requestedTargets, se
       : additions;
     const candidateAutomationMessage = basicAutomationMessage ?? damageMessage;
     const automationMessage = automationTargets.length
-      && canUseTargetHelperAutomations(candidateAutomationMessage)
+      && canUseTargetHelperAutomations()
       ? candidateAutomationMessage
       : null;
     const previous = [];
@@ -2168,7 +2194,8 @@ async function updateTargetHelperTargets(messageId, action, requestedTargets, se
       || !sourceData.targets?.some((uuid) => affectedTargets.has(uuid))
       || !(
         sourceData.saveResults?.some((result) => affectedTargets.has(result?.targetUuid))
-        || (affectedTarget && getSaveApplicationKind(validSource, affectedTarget) === "healing")
+        || sourceData.directSpell === true
+        || (affectedTarget && getSpellApplicationKind(validSource, affectedTarget) === "healing")
       )
     )
   ) {

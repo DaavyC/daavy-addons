@@ -258,7 +258,7 @@ function getTokenRectangle(document, gridSize) {
   const width = Number(document?.width);
   const height = Number(document?.height);
   if (![x, y, width, height, gridSize].every(Number.isFinite) || !(gridSize > 0)) return null;
-  return { x, y, width: width * gridSize, height: height * gridSize };
+  return new PIXI.Rectangle(x, y, width * gridSize, height * gridSize);
 }
 
 function getVerticalDistance(sourceDocument, targetDocument) {
@@ -309,42 +309,30 @@ function localizePlaceable(label) {
   return game.i18n.localize(`DAAVY_ADDONS.ReachControl.Placeables.${label}`);
 }
 
-function normalizeRectangle(rectangle) {
-  const left = Math.min(rectangle.x, rectangle.x + rectangle.width);
-  const right = Math.max(rectangle.x, rectangle.x + rectangle.width);
-  const top = Math.min(rectangle.y, rectangle.y + rectangle.height);
-  const bottom = Math.max(rectangle.y, rectangle.y + rectangle.height);
-  return { left, right, top, bottom };
-}
-
 function pointToRectangleDistance(point, rectangle) {
-  const { left, right, top, bottom } = normalizeRectangle(rectangle);
-  const dx = Math.max(left - point.x, 0, point.x - right);
-  const dy = Math.max(top - point.y, 0, point.y - bottom);
+  const dx = Math.max(rectangle.left - point.x, 0, point.x - rectangle.right);
+  const dy = Math.max(rectangle.top - point.y, 0, point.y - rectangle.bottom);
   return Math.hypot(dx, dy);
 }
 
 function rectangleToRectangleDistance(first, second) {
-  const a = normalizeRectangle(first);
-  const b = normalizeRectangle(second);
-  const dx = Math.max(a.left - b.right, b.left - a.right, 0);
-  const dy = Math.max(a.top - b.bottom, b.top - a.bottom, 0);
+  const dx = Math.max(first.left - second.right, second.left - first.right, 0);
+  const dy = Math.max(first.top - second.bottom, second.top - first.bottom, 0);
   return Math.hypot(dx, dy);
 }
 
 function segmentToRectangleDistance(segment, rectangle) {
-  const bounds = normalizeRectangle(rectangle);
   const corners = [
-    { x: bounds.left, y: bounds.top },
-    { x: bounds.right, y: bounds.top },
-    { x: bounds.right, y: bounds.bottom },
-    { x: bounds.left, y: bounds.bottom }
+    { x: rectangle.left, y: rectangle.top },
+    { x: rectangle.right, y: rectangle.top },
+    { x: rectangle.right, y: rectangle.bottom },
+    { x: rectangle.left, y: rectangle.bottom }
   ];
   const edges = corners.map((corner, index) => [corner, corners[(index + 1) % corners.length]]);
 
   if (
-    pointIsInsideRectangle(segment.a, bounds) ||
-    pointIsInsideRectangle(segment.b, bounds) ||
+    pointIsInsideRectangle(segment.a, rectangle) ||
+    pointIsInsideRectangle(segment.b, rectangle) ||
     edges.some(([start, end]) => foundry.utils.lineSegmentIntersects(segment.a, segment.b, start, end))
   ) return 0;
 

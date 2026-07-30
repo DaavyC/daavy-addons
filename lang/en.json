@@ -96,6 +96,7 @@
       "UndoHealing": "Undo healing",
       "UndoError": "Could not undo damage for this target.",
       "UndoHealingError": "Could not undo healing for this target.",
+      "DamageResult": "Damage",
       "HealingResult": "Healing",
       "WaitingVariant": "Waiting for a variant...",
       "RollSave": "Roll save",
