@@ -26,20 +26,17 @@ export const REACH_TYPES = {
     enabledSetting: SETTINGS.REACH_DOORS,
     rangeSetting: SETTINGS.REACH_DOOR_RANGE,
     gmSetting: SETTINGS.REACH_DOORS_AFFECT_GM,
-    label: "Door",
-    warnWhenMissingToken: false
+    label: "Door"
   },
   stairways: {
     enabledSetting: SETTINGS.REACH_STAIRWAYS,
     rangeSetting: SETTINGS.REACH_STAIRWAY_RANGE,
     gmSetting: SETTINGS.REACH_STAIRWAYS_AFFECT_GM,
-    label: "Stairway",
-    warnWhenMissingToken: true
+    label: "Stairway"
   },
   tokens: {
     enabledSetting: SETTINGS.REACH_TOKENS,
     rangeSetting: SETTINGS.REACH_TOKEN_RANGE,
-    label: "Token",
-    warnWhenMissingToken: true
+    label: "Token"
   }
 };

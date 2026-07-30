@@ -170,7 +170,7 @@ function evaluateReach(type, target, selection = captureTokenSelection()) {
   }
 
   if (!selection.token) {
-    if (config.warnWhenMissingToken) notify("DAAVY_ADDONS.ReachControl.Warnings.NoToken", { placeable: localizePlaceable(config.label) });
+    if (type !== "doors") notify("DAAVY_ADDONS.ReachControl.Warnings.NoToken", { placeable: localizePlaceable(config.label) });
     return { allowed: false, token: null };
   }
 
@@ -331,8 +331,8 @@ function segmentToRectangleDistance(segment, rectangle) {
   const edges = corners.map((corner, index) => [corner, corners[(index + 1) % corners.length]]);
 
   if (
-    pointIsInsideRectangle(segment.a, rectangle) ||
-    pointIsInsideRectangle(segment.b, rectangle) ||
+    rectangle.contains(segment.a.x, segment.a.y) ||
+    rectangle.contains(segment.b.x, segment.b.y) ||
     edges.some(([start, end]) => foundry.utils.lineSegmentIntersects(segment.a, segment.b, start, end))
   ) return 0;
 
@@ -344,8 +344,4 @@ function segmentToRectangleDistance(segment, rectangle) {
       return Math.hypot(corner.x - closest.x, corner.y - closest.y);
     })
   );
-}
-
-function pointIsInsideRectangle(point, bounds) {
-  return point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom;
 }

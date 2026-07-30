@@ -41,39 +41,6 @@ const resolveTarget = (uuid) => (
   typeof uuid === "string" ? fromUuidSync(uuid, { strict: false }) : null
 );
 
-export async function createTargetHelperMessage(data, { targets, automate = false } = {}) {
-  if (!canUseTargetHelper()) return getDocumentClass("ChatMessage").create(data);
-
-  return getDocumentClass("ChatMessage").create(data, {
-    [MODULE_ID]: {
-      targetHelper: {
-        targets: normalizeTargetUuids(targets),
-        automate: automate === true
-      }
-    }
-  });
-}
-
-export async function automateTargetHelperMessage(message, { targets } = {}) {
-  if (message?.documentName !== "ChatMessage" || !canUseTargetHelperAutomations()) return false;
-
-  const data = prepareTargetHelperData(message, normalizeTargetUuids(targets), {
-    automate: true,
-    automateDamage: true
-  });
-  if (!data?.automation) return false;
-
-  const current = message.getFlag(MODULE_ID, TARGET_HELPER_FLAG) ?? {};
-  await message.update({
-    [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}`]: {
-      ...data,
-      ...(Array.isArray(current.saveResults) ? { saveResults: current.saveResults } : {}),
-      ...(Array.isArray(current.damageResults) ? { damageResults: current.damageResults } : {})
-    }
-  });
-  return true;
-}
-
 export function registerTargetHelperHooks() {
   addPreCreateChatMessageHook(captureTargets);
   Hooks.on("preUpdateChatMessage", prepareHealingSpellVariant);
@@ -144,26 +111,21 @@ export function registerTargetHelperHooks() {
   });
 }
 
-function captureTargets(message, _data, options, userId) {
+function captureTargets(message, _data, _options, userId) {
   if (userId !== game.user.id || !canUseTargetHelper()) return;
   if (message.flags?.pf2e?.context?.type === "damage-taken") return;
 
-  const request = options?.[MODULE_ID]?.targetHelper;
   const pending = pendingDamageAutomation;
   let targets = pending?.targets
-    ?? request?.targets
     ?? normalizeTargetUuids();
-  if (!pending && !request && !targets.length && isHealingOnlyDamageRoll(message)) {
+  if (!pending && !targets.length && isHealingOnlyDamageRoll(message)) {
     const speakerToken = game.scenes.get(message.speaker.scene)?.tokens.get(message.speaker.token)
       ?? message.actor?.token
       ?? message.actor?.getActiveTokens(true, true).at(0);
     if (speakerToken) targets = [speakerToken.uuid];
   }
-  const automate = canUseTargetHelperAutomations()
-    && (request ? request.automate === true : true);
   const data = prepareTargetHelperData(message, targets, {
-    automate,
-    automateDamage: request?.automate === true,
+    automate: canUseTargetHelperAutomations(),
     pending
   });
   if (!data) return;
@@ -193,7 +155,7 @@ function captureTargets(message, _data, options, userId) {
 function prepareTargetHelperData(
   message,
   targets,
-  { automate = false, automateDamage = false, pending = null } = {}
+  { automate = false, pending = null } = {}
 ) {
   if (message.flags?.pf2e?.context?.type === "damage-taken") return null;
   if (isPendingHealingSpellVariant(message)) return { targets, variantPending: true };
@@ -212,7 +174,7 @@ function prepareTargetHelperData(
           ...(pending.outcome ? { outcome: pending.outcome } : {}),
           ...(pending.pendingTargets ? { pendingTargets: pending.pendingTargets } : {})
         }
-      : automateRoll && (automateDamage || automateHealing)
+      : automateHealing
         ? {
             type: automateHealing ? "healing" : "attack",
             sourceMessageId: message.id,
@@ -450,10 +412,7 @@ async function automateSource(message, data) {
   const automationTargets = pendingTargetUuids
     ? targets.filter((target) => pendingTargetUuids.has(target.uuid))
     : targets;
-  const npcOnly = getSetting(SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY) === true;
-  const automaticSaveTargets = type === "basic-save" && npcOnly
-    ? automationTargets.filter((target) => canAutomateActor(target.actor))
-    : automationTargets;
+  const automaticSaveTargets = automationTargets.filter((target) => canAutomateActor(target.actor));
   const rollTargetUuids = pendingTargetUuids ? [...pendingTargetUuids] : null;
   if (
     !targets.length
@@ -2090,11 +2049,9 @@ async function updateTargetHelperTargets(messageId, action, requestedTargets, se
     return false;
   }
 
-  const sourceMessage = isValidSave(data.save) || directSpell
+  const sourceMessage = isValidSave(data.save) || directSpell || variantPending
     ? message
-    : variantPending
-      ? message
-      : game.messages.get(data.saveMessageId ?? data.automation?.sourceMessageId);
+    : game.messages.get(data.saveMessageId ?? data.automation?.sourceMessageId);
   const sourceData = sourceMessage?.getFlag(MODULE_ID, TARGET_HELPER_FLAG);
   const validSource = isValidSave(sourceData?.save) || sourceData?.directSpell === true
     ? sourceMessage
