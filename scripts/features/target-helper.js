@@ -130,7 +130,7 @@ function captureTargets(message, _data, _options, userId) {
 
   const pending = pendingDamageAutomation;
   let targets = pending?.targets
-    ?? normalizeTargetUuids();
+    ?? Array.from(game.user.targets, (token) => token.document.uuid);
   if (!pending && !targets.length && isHealingOnlyDamageRoll(message)) {
     const speakerToken = game.scenes.get(message.speaker.scene)?.tokens.get(message.speaker.token)
       ?? message.actor?.token
@@ -189,7 +189,7 @@ function prepareTargetHelperData(
         }
       : automateHealing
         ? {
-            type: automateHealing ? "healing" : "attack",
+            type: "healing",
             sourceMessageId: message.id,
             status: "pending"
           }
@@ -322,31 +322,6 @@ async function reconcileHealingSpellVariantChange(message) {
     [`flags.${MODULE_ID}.${TARGET_HELPER_FLAG}.variantChanged`]: false
   }, { render: false });
   queueTargetHelperAutomation(message);
-}
-
-function normalizeTargetUuids(targets = game.user.targets) {
-  const values = (
-    typeof targets === "string"
-    || targets?.documentName === "Token"
-    || targets?.document?.documentName === "Token"
-  )
-    ? [targets]
-    : targets;
-  if (!values?.[Symbol.iterator]) {
-    throw new TypeError("Target Helper targets must be Token, TokenDocument, Token UUID, or iterable");
-  }
-
-  return [...new Set(Array.from(values, (target) => {
-    if (typeof target === "string") {
-      if (resolveTarget(target)?.documentName === "Token") return target;
-    } else {
-      const document = target?.documentName === "Token" ? target : target?.document;
-      if (document?.documentName === "Token" && typeof document.uuid === "string") {
-        return document.uuid;
-      }
-    }
-    throw new TypeError("Target Helper targets must contain only Token, TokenDocument, or Token UUID values");
-  }))];
 }
 
 function queueTargetHelperAutomation(message) {
@@ -1328,6 +1303,7 @@ function createSaveRow(message, token, data, resultMessage) {
     const waiting = document.createElement("span");
     waiting.className = "daavy-addons-target-helper-save-result daavy-addons-target-helper-waiting-variant";
     waiting.textContent = game.i18n.localize("DAAVY_ADDONS.TargetHelper.WaitingVariant");
+    waiting.classList.toggle("light-colors", getSetting(SETTINGS.TARGET_HELPER_COLOR_SCHEME) === TARGET_HELPER_COLOR_SCHEMES.HIGH_CONTRAST);
     row.append(waiting);
     return row;
   }

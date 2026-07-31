@@ -60,10 +60,6 @@ button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):focus-visi
 
 .daavy-addons-feedback-category:hover span {
   background: #4b6f8a;
-}
-
-.daavy-addons-feedback-category:hover span,
-.daavy-addons-feedback-category input:checked + span {
   opacity: 1;
 }
 
@@ -71,6 +67,7 @@ button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):focus-visi
   background: #5f86a3;
   border-color: transparent;
   color: #ffffff;
+  opacity: 1;
 }
 
 .daavy-addons-feedback-category input:focus-visible + span {

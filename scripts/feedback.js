@@ -100,7 +100,10 @@ export function injectFeedbackButtons(html) {
     ["daavy-addons-discord-action", "fa-brands fa-discord", "DAAVY_ADDONS.Discord.Label", () => documentRef.defaultView?.open(DISCORD_URL, "_blank", "noopener,noreferrer")],
     ["daavy-addons-feedback-action", "fa-solid fa-comment-dots", `${FEEDBACK_I18N_PREFIX}.MenuLabel`, () => new FeedbackForm().render({ force: true }), `${FEEDBACK_I18N_PREFIX}.MenuHint`]
   ].map(([className, icon, label, onClick, title]) => {
-    const button = createButton(documentRef, { className, icon, label: game.i18n.localize(label) });
+    const button = documentRef.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.innerHTML = `<i class="${icon}"></i> ${game.i18n.localize(label)}`;
     if (title) button.title = game.i18n.localize(title);
     button.addEventListener("click", onClick);
     return button;
@@ -108,12 +111,4 @@ export function injectFeedbackButtons(html) {
 
   actions.append(...buttons);
   firstGroup.before(actions);
-}
-
-function createButton(documentRef, { className, icon, label }) {
-  const button = documentRef.createElement("button");
-  button.type = "button";
-  button.className = className;
-  button.innerHTML = `<i class="${icon}"></i> ${label}`;
-  return button;
 }

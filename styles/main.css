@@ -364,3 +364,11 @@ button:is(
 .daavy-addons-target-helper-save-result.hidden-result {
   color: var(--color-text-subtle, #999);
 }
+
+.daavy-addons-target-helper .daavy-addons-target-helper-waiting-variant {
+  color: #666 !important;
+}
+
+.daavy-addons-target-helper .daavy-addons-target-helper-waiting-variant.light-colors {
+  color: #a8adb7 !important;
+}
