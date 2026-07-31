@@ -1,4 +1,8 @@
-import { MODULE_ID, SETTINGS } from "../constants.js";
+import {
+  MODULE_ID,
+  SETTINGS,
+  TARGET_HELPER_COLOR_SCHEMES
+} from "../constants.js";
 import { addPreCreateChatMessageHook } from "../hooks.js";
 import { getSetting, resolveUuid } from "../utils.js";
 
@@ -15,6 +19,15 @@ const TARGET_HELPER_BASIC_SAVE_MULTIPLIERS = {
   failure: 1,
   success: 0.5,
   criticalSuccess: 0
+};
+const TARGET_HELPER_RESULT_COLORS = {
+  criticalFailure: "#ff5c5c",
+  failure: "#ffb347",
+  success: "#55a7ff",
+  criticalSuccess: "#57d17a",
+  damage: "#ff5c5c",
+  healing: "#ff78c6",
+  neutral: "#a8adb7"
 };
 const TARGET_HELPER_SAVE_OUTCOMES = Object.keys(TARGET_HELPER_BASIC_SAVE_MULTIPLIERS);
 const TARGET_HELPER_DAMAGE_UPDATE_PATHS = new Set([
@@ -1249,16 +1262,20 @@ function createDamageResult(message, token, result) {
   const visible = game.user.isGM || (
     result?.blind !== true && (!result?.whisper?.length || result.whisper.includes(game.user.id))
   );
+  const showAmount = visible && Number.isFinite(result.amount);
   const canUndo = visible && (game.user.isGM || token.isOwner);
 
   container.className = "daavy-addons-target-helper-damage-result";
   amount.className = "daavy-addons-target-helper-damage-amount";
-  if (visible && Number.isFinite(result.amount)) {
+  if (showAmount) {
     amount.classList.add(result.amount === 0 ? "zero" : isHealing ? "healing" : "damage");
   }
-  amount.textContent = visible && Number.isFinite(result.amount)
+  amount.textContent = showAmount
     ? `${result.amount === 0 ? "" : isHealing ? "+" : "-"}${result.amount}`
     : game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
+  setResultColor(amount, !showAmount || result.amount === 0
+    ? TARGET_HELPER_RESULT_COLORS.neutral
+    : TARGET_HELPER_RESULT_COLORS[isHealing ? "healing" : "damage"]);
 
   button.disabled = !canUndo;
   bindPendingButton(button, () => undoDamage(message, token), !canUndo);
@@ -1324,6 +1341,7 @@ function createSaveRow(message, token, data, resultMessage) {
     result.textContent = game.i18n.localize(
       `DAAVY_ADDONS.TargetHelper.${kind === "damage" ? "DamageResult" : "HealingResult"}`
     );
+    setResultColor(result, TARGET_HELPER_RESULT_COLORS[kind]);
     row.append(result);
     return row;
   }
@@ -1423,6 +1441,7 @@ function createSaveResult(parentMessage, token, resultMessage) {
     element.classList.add("hidden-result");
     element.textContent = game.i18n.localize("DAAVY_ADDONS.TargetHelper.HiddenResult");
   }
+  setResultColor(element, TARGET_HELPER_RESULT_COLORS[outcome] ?? TARGET_HELPER_RESULT_COLORS.neutral);
   const rerollButton = createHeroPointRerollButton(parentMessage, token, resultMessage);
   if (rerollButton) element.prepend(rerollButton);
   return element;
@@ -1448,6 +1467,17 @@ function createIconButton(className, icon, title) {
   Object.assign(button, { type: "button", className, innerHTML: icon, title });
   button.setAttribute("aria-label", title);
   return button;
+}
+
+function setResultColor(element, color) {
+  if (
+    getSetting(SETTINGS.TARGET_HELPER_COLOR_SCHEME)
+    !== TARGET_HELPER_COLOR_SCHEMES.HIGH_CONTRAST
+  ) return;
+
+  for (const target of [element, ...element.children]) {
+    target.style.setProperty("color", color, "important");
+  }
 }
 
 function bindPendingButton(button, action, disabled = false) {

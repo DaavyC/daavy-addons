@@ -2,7 +2,7 @@
 - Added a custom `Target Helper`.
   - Optional automation for saves, strikes, and healing.
   - The `NPCs Only` setting is also available for this `Target Helper`.
-- Removed the **PF2e Toolbelt's Target Helper** automations (`Target Helper Automations`).
+- Removed the **PF2e Toolbelt — Target Helper** automations (`Target Helper Automations`).
 
 ##### 1.1.1
 - Added an `NPCs only` setting to `Target Helper Automations`.

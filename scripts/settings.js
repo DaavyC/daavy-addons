@@ -2,7 +2,8 @@ import {
   MODULE_ID,
   REACH_RANGE,
   REACH_TYPES,
-  SETTINGS
+  SETTINGS,
+  TARGET_HELPER_COLOR_SCHEMES
 } from "./constants.js";
 import { getSetting } from "./utils.js";
 
@@ -19,6 +20,16 @@ const SETTING_DEFINITIONS = {
     label: "TargetHelper.Automations.NpcOnly",
     defaultValue: false
   },
+  [SETTINGS.TARGET_HELPER_COLOR_SCHEME]: {
+    label: "TargetHelper.ColorScheme",
+    defaultValue: TARGET_HELPER_COLOR_SCHEMES.DEFAULT,
+    scope: "user",
+    requiresReload: true,
+    choices: {
+      [TARGET_HELPER_COLOR_SCHEMES.DEFAULT]: "DAAVY_ADDONS.Settings.TargetHelper.ColorScheme.Choices.Default",
+      [TARGET_HELPER_COLOR_SCHEMES.HIGH_CONTRAST]: "DAAVY_ADDONS.Settings.TargetHelper.ColorScheme.Choices.HighContrast"
+    }
+  },
   [SETTINGS.REACH_CONTROL]: { label: "ReachControl", defaultValue: false },
   [SETTINGS.REACH_DOORS]: { label: "ReachControl.Doors.Enabled", defaultValue: true },
   [SETTINGS.REACH_DOOR_RANGE]: { label: "ReachControl.Doors.Range", defaultValue: 1 },
@@ -31,15 +42,18 @@ const SETTING_DEFINITIONS = {
 };
 
 export function registerSettings() {
-  for (const [key, { label, defaultValue }] of Object.entries(SETTING_DEFINITIONS)) {
-    const type = typeof defaultValue === "boolean" ? Boolean : Number;
+  for (const [key, { label, defaultValue, scope = "world", ...options }] of Object.entries(SETTING_DEFINITIONS)) {
+    const type = typeof defaultValue === "boolean"
+      ? Boolean
+      : typeof defaultValue === "number" ? Number : String;
     game.settings.register(MODULE_ID, key, {
       name: `DAAVY_ADDONS.Settings.${label}.Name`,
       hint: `DAAVY_ADDONS.Settings.${label}.Hint`,
-      scope: "world",
+      scope,
       config: !key.startsWith("targetHelper") || game.system.id === "pf2e",
       type,
       default: defaultValue,
+      ...options,
       ...(type === Number ? { range: REACH_RANGE } : {})
     });
   }
@@ -123,11 +137,12 @@ export function organizeSettingsConfig(html) {
   appendRows(featuresGroup, featureRows);
 
   const automationRow = findSettingRow(html, SETTINGS.TARGET_HELPER_AUTOMATIONS);
-  if (automationRow) {
+  const colorSchemeRow = findSettingRow(html, SETTINGS.TARGET_HELPER_COLOR_SCHEME);
+  if (automationRow || colorSchemeRow) {
     const targetHelperGroup = createGroup(documentRef, "TargetHelper");
-    appendRows(targetHelperGroup, [automationRow]);
+    appendRows(targetHelperGroup, [colorSchemeRow, automationRow].filter(Boolean));
     const npcOnlyRow = findSettingRow(html, SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY);
-    const automationSection = npcOnlyRow ? documentRef.createElement("section") : null;
+    const automationSection = automationRow && npcOnlyRow ? documentRef.createElement("section") : null;
     if (automationSection) {
       const title = documentRef.createElement("h4");
       automationSection.className = "daavy-addons-settings-section";

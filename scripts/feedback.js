@@ -95,29 +95,18 @@ export function injectFeedbackButtons(html) {
   const actions = documentRef.createElement("div");
   actions.className = FEEDBACK_ACTIONS_CLASS;
 
-  const donateButton = createButton(documentRef, {
-    className: "daavy-addons-donate-action",
-    icon: "fa-solid fa-heart",
-    label: game.i18n.localize("DAAVY_ADDONS.Donate.Label")
+  const buttons = [
+    ["daavy-addons-donate-action", "fa-solid fa-heart", "DAAVY_ADDONS.Donate.Label", () => documentRef.defaultView?.open(DONATE_URL, "_blank", "noopener,noreferrer")],
+    ["daavy-addons-discord-action", "fa-brands fa-discord", "DAAVY_ADDONS.Discord.Label", () => documentRef.defaultView?.open(DISCORD_URL, "_blank", "noopener,noreferrer")],
+    ["daavy-addons-feedback-action", "fa-solid fa-comment-dots", `${FEEDBACK_I18N_PREFIX}.MenuLabel`, () => new FeedbackForm().render({ force: true }), `${FEEDBACK_I18N_PREFIX}.MenuHint`]
+  ].map(([className, icon, label, onClick, title]) => {
+    const button = createButton(documentRef, { className, icon, label: game.i18n.localize(label) });
+    if (title) button.title = game.i18n.localize(title);
+    button.addEventListener("click", onClick);
+    return button;
   });
-  donateButton.addEventListener("click", () => documentRef.defaultView?.open(DONATE_URL, "_blank", "noopener,noreferrer"));
 
-  const discordButton = createButton(documentRef, {
-    className: "daavy-addons-discord-action",
-    icon: "fa-brands fa-discord",
-    label: game.i18n.localize("DAAVY_ADDONS.Discord.Label")
-  });
-  discordButton.addEventListener("click", () => documentRef.defaultView?.open(DISCORD_URL, "_blank", "noopener,noreferrer"));
-
-  const feedbackButton = createButton(documentRef, {
-    className: "daavy-addons-feedback-action",
-    icon: "fa-solid fa-comment-dots",
-    label: game.i18n.localize(`${FEEDBACK_I18N_PREFIX}.MenuLabel`)
-  });
-  feedbackButton.title = game.i18n.localize(`${FEEDBACK_I18N_PREFIX}.MenuHint`);
-  feedbackButton.addEventListener("click", () => new FeedbackForm().render({ force: true }));
-
-  actions.append(donateButton, discordButton, feedbackButton);
+  actions.append(...buttons);
   firstGroup.before(actions);
 }
 

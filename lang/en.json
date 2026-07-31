@@ -15,6 +15,14 @@
       "TargetHelper": {
         "Name": "Target Helper",
         "Hint": "Adds target controls to supported PF2e chat cards.",
+        "ColorScheme": {
+          "Name": "Color scheme",
+          "Hint": "Choose the colors used for Target Helper results.",
+          "Choices": {
+            "Default": "Default",
+            "HighContrast": "Light Colors"
+          }
+        },
         "Automations": {
           "Enabled": {
             "Name": "Enable automation",
