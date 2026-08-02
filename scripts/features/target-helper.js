@@ -2802,20 +2802,20 @@ async function applyDamageRolls(message, token, multiplier, rollIndexes = [0], d
       rollIndex
     );
     if (!result) {
-      await Promise.allSettled(results.map(({ result: applied }) => rollbackDamageResult(token.actor, applied)));
+      await Promise.allSettled(results.map((applied) => rollbackDamageResult(token.actor, applied)));
       return false;
     }
-    results.push({ result });
+    results.push(result);
   }
 
   let stored = false;
   try {
-    stored = await appendDamageResults(message, results.map(({ result }) => result));
+    stored = await appendDamageResults(message, results);
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to store Target Helper damage results`, error);
   }
   if (stored) return true;
-  await Promise.allSettled(results.map(({ result }) => rollbackDamageResult(token.actor, result)));
+  await Promise.allSettled(results.map((result) => rollbackDamageResult(token.actor, result)));
   return false;
 }
 

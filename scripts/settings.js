@@ -156,15 +156,9 @@ export function organizeSettingsConfig(html) {
     const npcOnlyRow = findSettingRow(html, SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY);
     const automationRows = [heroPointRow, npcOnlyRow].filter(Boolean);
     const automationSection = automationRow && automationRows.length
-      ? documentRef.createElement("section")
+      ? createSection(documentRef, "Automations", automationRows)
       : null;
     if (automationSection) {
-      const title = documentRef.createElement("h4");
-      automationSection.className = "daavy-addons-settings-section";
-      title.className = "daavy-addons-settings-section-title";
-      title.textContent = game.i18n.localize("DAAVY_ADDONS.Settings.Sections.Automations");
-      automationSection.appendChild(title);
-      appendRows(automationSection, automationRows);
       targetHelperGroup.appendChild(automationSection);
     }
     featuresGroup.after(targetHelperGroup);
@@ -189,14 +183,7 @@ export function organizeSettingsConfig(html) {
 
   for (const [sectionKey, rows] of Object.entries(sectionRows)) {
     if (!rows.length) continue;
-    const section = documentRef.createElement("section");
-    const title = documentRef.createElement("h4");
-    title.className = "daavy-addons-settings-section-title";
-    title.textContent = game.i18n.localize(`DAAVY_ADDONS.Settings.Sections.${sectionKey}`);
-    section.className = "daavy-addons-settings-section";
-    section.appendChild(title);
-    appendRows(section, rows);
-    reachGroup.appendChild(section);
+    reachGroup.appendChild(createSection(documentRef, sectionKey, rows));
   }
 
   configureVisibility(html, SETTINGS.REACH_CONTROL, [reachGroup]);
@@ -222,6 +209,18 @@ function createGroup(documentRef, groupKey) {
   title.textContent = game.i18n.localize(`DAAVY_ADDONS.Settings.Groups.${groupKey}`);
   group.appendChild(title);
   return group;
+}
+
+function createSection(documentRef, sectionKey, rows) {
+  const section = documentRef.createElement("section");
+  const title = documentRef.createElement("h4");
+
+  title.className = "daavy-addons-settings-section-title";
+  title.textContent = game.i18n.localize(`DAAVY_ADDONS.Settings.Sections.${sectionKey}`);
+  section.className = "daavy-addons-settings-section";
+  section.appendChild(title);
+  appendRows(section, rows);
+  return section;
 }
 
 function appendRows(target, rows) {
