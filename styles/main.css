@@ -94,6 +94,30 @@ button.daavy-addons-feedback-action:hover {
   margin: 0 0 2px;
 }
 
+.daavy-addons-target-helper-splash-divider {
+  align-items: center;
+  color: var(--color-text-subtle, #666);
+  display: flex;
+  font: inherit;
+  height: 18px;
+  white-space: nowrap;
+}
+
+.daavy-addons-target-helper-splash-divider::before,
+.daavy-addons-target-helper-splash-divider::after {
+  border-top: 2px groove white;
+  content: "";
+  flex: 1;
+}
+
+.daavy-addons-target-helper-splash-divider::before {
+  margin-right: 0.5rem;
+}
+
+.daavy-addons-target-helper-splash-divider::after {
+  margin-left: 0.5rem;
+}
+
 .daavy-addons-target-helper-controls {
   display: flex;
   gap: 2px;

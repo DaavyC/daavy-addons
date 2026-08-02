@@ -3,6 +3,7 @@ export const MODULE_ID = "daavy-addons";
 export const SETTINGS = {
   TARGET_HELPER: "targetHelper",
   TARGET_HELPER_AUTOMATIONS: "targetHelperAutomations",
+  TARGET_HELPER_AUTOMATIONS_HERO_POINT: "targetHelperAutomationsHeroPoint",
   TARGET_HELPER_AUTOMATIONS_NPC_ONLY: "targetHelperAutomationsNpcOnly",
   TARGET_HELPER_COLOR_SCHEME: "targetHelperColorScheme",
   REACH_CONTROL: "reachControl",
@@ -19,6 +20,13 @@ export const SETTINGS = {
 export const TARGET_HELPER_COLOR_SCHEMES = {
   DEFAULT: "default",
   HIGH_CONTRAST: "highContrast"
+};
+
+export const TARGET_HELPER_NPC_ONLY_MODES = {
+  DISABLED: "disabled",
+  APPLICATION: "application",
+  APPLICATION_AND_SAVE: "applicationAndSave",
+  ALL: "all"
 };
 
 export const REACH_RANGE = {

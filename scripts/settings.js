@@ -3,7 +3,8 @@ import {
   REACH_RANGE,
   REACH_TYPES,
   SETTINGS,
-  TARGET_HELPER_COLOR_SCHEMES
+  TARGET_HELPER_COLOR_SCHEMES,
+  TARGET_HELPER_NPC_ONLY_MODES
 } from "./constants.js";
 import { getSetting } from "./utils.js";
 
@@ -16,9 +17,19 @@ const SETTING_DEFINITIONS = {
     label: "TargetHelper.Automations.Enabled",
     defaultValue: false
   },
+  [SETTINGS.TARGET_HELPER_AUTOMATIONS_HERO_POINT]: {
+    label: "TargetHelper.Automations.HeroPoint",
+    defaultValue: true
+  },
   [SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY]: {
     label: "TargetHelper.Automations.NpcOnly",
-    defaultValue: false
+    defaultValue: TARGET_HELPER_NPC_ONLY_MODES.DISABLED,
+    choices: {
+      [TARGET_HELPER_NPC_ONLY_MODES.DISABLED]: "DAAVY_ADDONS.Settings.TargetHelper.Automations.NpcOnly.Choices.Disabled",
+      [TARGET_HELPER_NPC_ONLY_MODES.APPLICATION]: "DAAVY_ADDONS.Settings.TargetHelper.Automations.NpcOnly.Choices.Application",
+      [TARGET_HELPER_NPC_ONLY_MODES.APPLICATION_AND_SAVE]: "DAAVY_ADDONS.Settings.TargetHelper.Automations.NpcOnly.Choices.ApplicationAndSave",
+      [TARGET_HELPER_NPC_ONLY_MODES.ALL]: "DAAVY_ADDONS.Settings.TargetHelper.Automations.NpcOnly.Choices.All"
+    }
   },
   [SETTINGS.TARGET_HELPER_COLOR_SCHEME]: {
     label: "TargetHelper.ColorScheme",
@@ -141,15 +152,19 @@ export function organizeSettingsConfig(html) {
   if (automationRow || colorSchemeRow) {
     const targetHelperGroup = createGroup(documentRef, "TargetHelper");
     appendRows(targetHelperGroup, [colorSchemeRow, automationRow].filter(Boolean));
+    const heroPointRow = findSettingRow(html, SETTINGS.TARGET_HELPER_AUTOMATIONS_HERO_POINT);
     const npcOnlyRow = findSettingRow(html, SETTINGS.TARGET_HELPER_AUTOMATIONS_NPC_ONLY);
-    const automationSection = automationRow && npcOnlyRow ? documentRef.createElement("section") : null;
+    const automationRows = [heroPointRow, npcOnlyRow].filter(Boolean);
+    const automationSection = automationRow && automationRows.length
+      ? documentRef.createElement("section")
+      : null;
     if (automationSection) {
       const title = documentRef.createElement("h4");
       automationSection.className = "daavy-addons-settings-section";
       title.className = "daavy-addons-settings-section-title";
       title.textContent = game.i18n.localize("DAAVY_ADDONS.Settings.Sections.Automations");
       automationSection.appendChild(title);
-      appendRows(automationSection, [npcOnlyRow]);
+      appendRows(automationSection, automationRows);
       targetHelperGroup.appendChild(automationSection);
     }
     featuresGroup.after(targetHelperGroup);

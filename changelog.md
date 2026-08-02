@@ -1,8 +1,12 @@
 ##### 1.2.0
-- Added a custom `Target Helper`.
-  - Optional automation for saves, strikes, and healing.
-  - The `NPCs Only` setting is also available for this `Target Helper`.
-- Removed the **PF2e Toolbelt — Target Helper** automations (`Target Helper Automations`).
+- Added a built-in `Target Helper`.
+  - Includes optional automation.
+    - The `NPCs only` setting is also available for this `Target Helper`.
+      - This setting has four options: `Disabled`, `Apply Results Only`, `Apply Results and Saves`, and `Everything`.
+    - Includes `Hero Point` automation.
+      - This automation can be disabled if needed.
+    - During development, I tried to cover as many automation scenarios as possible. However, I may have missed some. If you find any missing automation that should be within the scope of this feature, please use the `Send Feedback` button.
+- Removed the previous integration with the `PF2e Toolbelt` Target Helper.
 
 ##### 1.1.1
 - Added an `NPCs only` setting to `Target Helper Automations`.
