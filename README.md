@@ -39,7 +39,9 @@ This module groups features that don’t need separate modules.
 
 ## Installation
 
-In Foundry VTT, open Add-on Modules, choose Install Module, and enter the [manifest URL](https://github.com/DaavyC/daavy-addons/releases/latest/download/module.json).
+In Foundry VTT, open Add-on Modules, choose Install Module, and enter the manifest URL:
+
+<https://github.com/DaavyC/daavy-addons/releases/latest/download/module.json>
 
 ## Compatibility
 
