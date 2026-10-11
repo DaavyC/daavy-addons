@@ -1,80 +1,262 @@
-button.daavy-addons-feedback-send {
-  background: #236c35;
-  border-color: #45a85b;
-  color: #f4fff5;
+:root {
+  --feedback-paper: var(--color-bg-app, #121017);
+  --feedback-paper-raised: var(--color-bg-option, #1b1720);
+  --feedback-ink: var(--color-text-primary, #f5eee5);
+  --feedback-rule: var(--color-border-light-primary, #675762);
+  --feedback-accent: #d9b16c;
+  --feedback-focus: var(--color-warm-2, #e4b86f);
+  --feedback-success: #6fcf9b;
+  --feedback-danger: #e27c78;
+  --feedback-space-sm: 8px;
+  --feedback-space-md: 12px;
+  --feedback-space-lg: 16px;
+  --feedback-duration-fast: 160ms;
+  --feedback-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --feedback-radius-input: 7px;
+  --feedback-control-height: 44px;
 }
 
-.daavy-addons-feedback-send:hover {
-  background: #2f8846;
+#daavy-addons-feedback {
+  background: var(--feedback-paper);
+  border: 1px solid var(--feedback-rule);
+  border-radius: 10px;
+  box-shadow: 0 16px 44px rgb(0 0 0 / 45%);
+  color: var(--feedback-ink);
+  font-family: var(--font-primary, system-ui, sans-serif);
+  overflow: hidden;
 }
 
-.daavy-addons-feedback-cancel {
-  background: #7f2424;
-  border-color: #c64b4b;
-  color: #fff6f6;
+#daavy-addons-feedback .window-header {
+  background: var(--feedback-paper);
+  border-bottom: 1px solid color-mix(in srgb, var(--feedback-rule) 70%, transparent);
+  min-height: var(--feedback-control-height);
+  padding: 0 var(--feedback-space-md) 0 var(--feedback-space-lg);
 }
 
-.daavy-addons-feedback-cancel:hover {
-  background: #9b3030;
+#daavy-addons-feedback .window-title {
+  color: var(--feedback-ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
-button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):is(:focus, :active) {
+#daavy-addons-feedback .window-content {
+  background: var(--feedback-paper);
+  color: var(--feedback-ink);
+  display: flex;
+  flex-direction: column;
+  gap: var(--feedback-space-lg);
+  min-width: 0;
+  padding: var(--feedback-space-lg);
+}
+
+#daavy-addons-feedback .form-group.stacked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--feedback-space-sm);
+  margin: 0;
+  min-width: 0;
+}
+
+#daavy-addons-feedback .form-group.stacked > label,
+#daavy-addons-feedback .form-group.stacked > span {
+  color: var(--feedback-ink);
+  font-weight: 700;
+}
+
+#daavy-addons-feedback .hint {
+  color: var(--color-text-secondary, #b8aeb5);
+  line-height: 1.4;
+  margin: 0;
+  min-height: 1lh;
+}
+
+#daavy-addons-feedback textarea {
+  background: var(--feedback-paper-raised);
+  border: 1px solid var(--feedback-rule);
+  border-radius: var(--feedback-radius-input);
+  box-sizing: border-box;
   box-shadow: none;
-  outline: none;
+  color: var(--feedback-ink);
+  font: inherit;
+  line-height: 1.45;
+  margin: 0;
+  min-height: 12rem;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+  padding: var(--feedback-space-md);
+  resize: none;
+  transition: background-color var(--feedback-duration-fast) var(--feedback-ease-out),
+    border-color var(--feedback-duration-fast) var(--feedback-ease-out);
+  width: 100%;
 }
 
-button:is(.daavy-addons-feedback-send, .daavy-addons-feedback-cancel):focus-visible {
-  box-shadow: none;
-  outline: 2px solid #4a90e2;
-  outline-offset: 2px;
+#daavy-addons-feedback textarea:hover {
+  border-color: var(--feedback-focus);
+}
+
+#daavy-addons-feedback textarea:focus {
+  border-color: var(--feedback-focus);
+}
+
+#daavy-addons-feedback textarea:focus-visible {
+  outline-color: transparent;
+}
+
+#daavy-addons-feedback textarea:focus:valid {
+  border-color: var(--feedback-success);
+}
+
+#daavy-addons-feedback textarea:user-invalid:not(:focus) {
+  border-color: var(--feedback-danger);
+}
+
+#daavy-addons-feedback textarea:user-valid:not(:focus) {
+  border-color: var(--feedback-success);
 }
 
 .daavy-addons-feedback-categories {
   display: grid;
-  gap: 8px;
+  gap: var(--feedback-space-sm);
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
 }
 
 .daavy-addons-feedback-category {
+  --feedback-category-accent: var(--feedback-accent);
   margin: 0;
+  min-width: 0;
   position: relative;
 }
 
 .daavy-addons-feedback-category input {
+  height: 1px;
   opacity: 0;
-  pointer-events: none;
   position: absolute;
+  width: 1px;
 }
 
 .daavy-addons-feedback-category span {
   align-items: center;
-  background: #3f5f78;
-  border: 1px solid #6f8ba0;
-  border-radius: 4px;
-  color: #f3f6fa;
+  background: var(--feedback-paper-raised);
+  border: 1px solid var(--feedback-rule);
+  border-radius: var(--feedback-radius-input);
+  color: var(--feedback-ink);
   cursor: pointer;
   display: flex;
   justify-content: center;
-  min-height: 36px;
-  opacity: 0.65;
+  min-height: var(--feedback-control-height);
+  overflow-wrap: anywhere;
+  padding: 0 var(--feedback-space-md);
+  text-align: center;
+  transition: background-color var(--feedback-duration-fast) var(--feedback-ease-out),
+    border-color var(--feedback-duration-fast) var(--feedback-ease-out),
+    transform var(--feedback-duration-fast) var(--feedback-ease-out);
+  white-space: nowrap;
 }
 
-.daavy-addons-feedback-category:hover span {
-  background: #4b6f8a;
+.daavy-addons-feedback-category:has(input[value="Bug"]:checked) {
+  --feedback-category-accent: var(--feedback-danger);
 }
 
-.daavy-addons-feedback-category:hover span,
+.daavy-addons-feedback-category:has(input[value="Suggestion"]:checked) {
+  --feedback-category-accent: var(--feedback-success);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .daavy-addons-feedback-category:hover span {
+    background: color-mix(in srgb, var(--feedback-category-accent) 12%, var(--feedback-paper-raised));
+    border-color: var(--feedback-category-accent);
+    transform: translateY(-1px);
+  }
+}
+
 .daavy-addons-feedback-category input:checked + span {
-  opacity: 1;
-}
-
-.daavy-addons-feedback-category input:checked + span {
-  background: #5f86a3;
-  border-color: transparent;
-  color: #ffffff;
+  background: color-mix(in srgb, var(--feedback-category-accent) 18%, var(--feedback-paper-raised));
+  border-color: var(--feedback-category-accent);
 }
 
 .daavy-addons-feedback-category input:focus-visible + span {
-  outline: 2px solid var(--color-text-primary, #ffffff);
+  outline: 2px solid var(--feedback-focus);
   outline-offset: 2px;
+}
+
+.daavy-addons-feedback-category input:disabled + span {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+#daavy-addons-feedback .form-footer {
+  display: grid;
+  gap: var(--feedback-space-sm);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+}
+
+#daavy-addons-feedback .form-footer button {
+  align-items: center;
+  border-radius: var(--feedback-radius-input);
+  box-sizing: border-box;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  gap: var(--feedback-space-sm);
+  justify-content: center;
+  min-height: var(--feedback-control-height);
+  min-width: 0;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  padding: 0 var(--feedback-space-md);
+  transition: background-color var(--feedback-duration-fast) var(--feedback-ease-out),
+    border-color var(--feedback-duration-fast) var(--feedback-ease-out),
+    transform var(--feedback-duration-fast) var(--feedback-ease-out);
+  white-space: nowrap;
+}
+
+#daavy-addons-feedback .daavy-addons-feedback-send {
+  background: var(--feedback-accent);
+  border-color: var(--feedback-accent);
+  color: #121017;
+}
+
+#daavy-addons-feedback .daavy-addons-feedback-cancel {
+  background: transparent;
+  border-color: var(--feedback-rule);
+  color: var(--feedback-ink);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #daavy-addons-feedback .daavy-addons-feedback-send:hover {
+    background: color-mix(in srgb, var(--feedback-accent) 88%, var(--feedback-paper));
+    border-color: var(--feedback-focus);
+    transform: translateY(-1px);
+  }
+
+  #daavy-addons-feedback .daavy-addons-feedback-cancel:hover {
+    background: var(--feedback-paper-raised);
+    border-color: var(--feedback-focus);
+    transform: translateY(-1px);
+  }
+}
+
+#daavy-addons-feedback .form-footer button:focus-visible {
+  outline-color: var(--feedback-focus);
+}
+
+#daavy-addons-feedback .form-footer button:active {
+  transform: translateY(1px);
+}
+
+#daavy-addons-feedback .form-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #daavy-addons-feedback textarea,
+  .daavy-addons-feedback-category span,
+  #daavy-addons-feedback .form-footer button {
+    transition: none;
+  }
 }

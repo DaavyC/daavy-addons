@@ -3,65 +3,148 @@
     "Settings": {
       "Groups": {
         "Features": "Features",
-        "TargetHelperAutomations": "Target Helper Automations",
+        "TargetHelper": "Target Helper",
         "ReachControl": "Reach Control"
       },
       "Sections": {
+        "TemplateHelper": "Template Helper",
+        "Automations": "Automations",
         "Doors": "Doors",
         "Stairways": "Stairways",
         "Tokens": "Tokens"
       },
-      "TargetHelperAutomations": {
-        "Name": "Target Helper Automations",
-        "Hint": "Automatically rolls saves and applies damage through PF2e Toolbelt's Target Helper.",
-        "UnavailableHint": "Requires a Pathfinder 2e world with PF2e Toolbelt active.",
-        "NpcsOnly": {
-          "Name": "NPCs Only",
-          "Hint": "Automatically roll saves and apply damage only for NPC targets."
+      "TargetHelper": {
+        "Name": "Target Helper",
+        "Hint": "Adds target controls to supported PF2e chat cards.",
+        "ColorScheme": {
+          "Name": "Color scheme",
+          "Hint": "Choose the colors used for Target Helper results.",
+          "Choices": {
+            "Default": "Default",
+            "HighContrast": "Light colors"
+          }
+        },
+        "Automations": {
+          "Enabled": {
+            "Name": "Automations",
+            "Hint": "Automatically roll saves and damage, then apply the results. An active GM is required."
+          },
+          "HeroPoint": {
+            "Name": "Hero Point",
+            "Hint": "Automatically update damage after Hero Point rerolls."
+          },
+          "NpcOnly": {
+            "Name": "NPCs only",
+            "Hint": "Choose which automation steps are limited to NPC targets.",
+            "Choices": {
+              "Disabled": "Disabled",
+              "Application": "Apply results only",
+              "ApplicationAndSave": "Apply results and saves",
+              "All": "Everything"
+            }
+          }
         }
+      },
+      "TemplateHelper": {
+        "Name": "Template Helper",
+        "Hint": "Automatically place spell templates and target tokens inside them.",
+        "Targeting": {
+          "Name": "Target behavior",
+          "Hint": "Choose how tokens inside a template are added to Target Helper.",
+          "Choices": {
+            "Confirmation": "Show confirmation window",
+            "Enemies": "Always target enemies",
+            "All": "Always target everyone"
+          }
+        }
+      },
+      "Incompatibilities": {
+        "Title": "Conflicting settings",
+        "Content": "Some settings conflict with Daavy's Addons. Disable them?",
+        "Toolbelt": "PF2e Toolbelt: Target Helper",
+        "Workbench": "PF2e Workbench: Automatic Damage Roll Permission",
+        "Disable": "Disable settings",
+        "Cancel": "Cancel",
+        "Error": "Some settings could not be disabled."
       },
       "ReachControl": {
         "Name": "Reach Control",
-        "Hint": "Limit supported placeable interactions by token distance.",
+        "Hint": "Limit interactions with doors, Stairways, and tokens by distance.",
         "Doors": {
           "Enabled": {
             "Name": "Enabled",
             "Hint": "Limit door interactions by range."
           },
           "Range": {
-            "Name": "Maximum Range",
+            "Name": "Maximum range",
             "Hint": "Maximum door interaction range in grid squares."
           },
           "AffectGM": {
-            "Name": "Affect GMs?",
+            "Name": "Apply to GM-controlled tokens",
             "Hint": "Apply the door range limit when a GM controls one token."
           }
         },
         "Stairways": {
           "Enabled": {
             "Name": "Enabled",
-            "Hint": "Limit Stairways teleports by range when Stairways is active."
+            "Hint": "Limit Stairways teleportation by range."
           },
           "Range": {
-            "Name": "Maximum Range",
+            "Name": "Maximum range",
             "Hint": "Maximum Stairways interaction range in grid squares."
           },
           "AffectGM": {
-            "Name": "Affect GMs?",
+            "Name": "Apply to GM-controlled tokens",
             "Hint": "Apply the Stairways range limit when a GM controls one token."
           }
         },
         "Tokens": {
           "Enabled": {
             "Name": "Enabled",
-            "Hint": "Limit opening another token's actor sheet by range."
+            "Hint": "Limit access to another token's actor sheet by range."
           },
           "Range": {
-            "Name": "Maximum Range",
+            "Name": "Maximum range",
             "Hint": "Maximum token interaction range in grid squares."
           }
         }
       }
+    },
+    "TargetHelper": {
+      "Actions": {
+        "Damage": "Apply damage",
+        "Half": "Apply half damage",
+        "Double": "Apply double damage",
+        "Block": "Apply no damage",
+        "Healing": "Apply healing"
+      },
+      "ApplyError": "Could not apply damage to this target.",
+      "ApplyHealingError": "Could not apply healing to this target.",
+      "DamageResultError": "Could not record the damage. The damage was undone.",
+      "HealingResultError": "Could not record the healing. The healing was undone.",
+      "AddTargets": "Add selected targets",
+      "ClearTargets": "Clear targets and undo results",
+      "UndoDamage": "Undo damage",
+      "UndoHealing": "Undo healing",
+      "UndoError": "Could not undo damage for this target.",
+      "UndoHealingError": "Could not undo healing for this target.",
+      "TemplateTargeting": {
+        "Title": "Choose template targets",
+        "Allies": "Allies",
+        "Enemies": "Enemies",
+        "All": "Everyone"
+      },
+      "DamageResult": "Damage",
+      "HealingResult": "Healing",
+      "Splash": "Splash",
+      "WaitingVariant": "Waiting for a variant…",
+      "RollSave": "Roll save",
+      "RemoveTarget": "Remove target",
+      "ResetSaveResult": "Reset save",
+      "HiddenResult": "Hidden result",
+      "NoActiveGM": "An active GM is required.",
+      "SaveError": "Could not roll this target's save.",
+      "AutomationError": "Automation failed. Manual controls are still available."
     },
     "ReachControl": {
       "Placeables": {
@@ -70,17 +153,17 @@
         "Token": "token"
       },
       "Warnings": {
-        "MultipleTokens": "Please select a single token.",
-        "NoToken": "No character is selected to interact with this {placeable}.",
+        "MultipleTokens": "Select one token.",
+        "NoToken": "No token is selected to interact with this {placeable}.",
         "OutOfReach": "This {placeable} is outside {tokenName}'s reach or unavailable."
       },
       "PerObjectRange": {
-        "Label": "Reach Control Range",
-        "Hint": "Use a positive grid-square range for this object. Use 0 for the matching module setting."
+        "Label": "Reach Control range",
+        "Hint": "Set the range in grid squares. Use 0 to follow the module setting."
       }
     },
     "Feedback": {
-      "MenuLabel": "Send Feedback",
+      "MenuLabel": "Send feedback",
       "MenuHint": "Send anonymous feedback about Daavy's Addons.",
       "Category": "Category",
       "Categories": {
@@ -88,12 +171,12 @@
         "Suggestion": "Suggestion"
       },
       "Message": "Message",
-      "MessageHint": "Describe your feedback without including personal or private information.",
+      "MessageHint": "Describe the issue or suggestion. Do not include personal information.",
       "Cancel": "Cancel",
-      "Send": "Send Feedback",
-      "Invalid": "Choose a category and enter a message of up to 3,000 characters.",
-      "Success": "Feedback sent. Thank you!",
-      "Error": "Unable to send feedback. Please try again later."
+      "Send": "Send feedback",
+      "Invalid": "Select a category and enter a message of up to 3,000 characters.",
+      "Success": "Feedback sent.",
+      "Error": "Could not send feedback. Try again later."
     },
     "Donate": {
       "Label": "Donate"

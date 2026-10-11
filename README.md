@@ -1,6 +1,6 @@
-# 🎯 Daavy's Addons
+# Daavy's Addons
 
-This module includes standalone features and integrations that do not require dedicated modules.
+This module groups features that don’t need separate modules.
 
 ---
 
@@ -8,32 +8,45 @@ This module includes standalone features and integrations that do not require de
 
 ---
 
-## 🗂️ Features
+## Features
 
-- **🎯 Target Helper Automations (PF2e)** — Rolls saves, rolls damage, and applies damage automatically for supported Target Helper chat cards.
-- **🖐️ Reach Control** — Limits door, Stairways, and token interactions by distance in grid squares.
+- **Target Helper (PF2e):** Adds save, damage, healing, and undo controls to chat cards. Optional automation requires an active GM. Hero Point rerolls can update damage, and Template Helper adds targets from spell templates.
+- **Reach Control:** Limits interactions with doors, Stairways, and tokens by distance in grid squares. Each object can override the module's range.
 
----
+## Settings
 
-## ⚙️ Settings
+### PF2e only
 
-- **Target Helper Automations** — Enables or disables this automation feature.
-- **Reach Control** — Enables range limits and per-placeable integrations.
+| Setting | Effect |
+| --- | --- |
+| Target Helper | Shows target controls on supported chat cards. |
+| Color scheme | Changes the colors of Target Helper results. |
+| Automations | Rolls saves and damage, then applies the results. Requires an active GM. |
+| Hero Point | Updates damage after Hero Point rerolls. |
+| NPCs only | Limits selected automation steps to NPC targets. Choose application only, application and saves, or all steps. Disabled applies no NPC restriction. |
+| Template Helper | Places spell templates and adds targets inside them. |
+| Target behavior | Asks which template targets to add, or always adds enemies or everyone. |
 
----
+### Reach Control
 
-## 🛠️ Compatibility
+| Setting | Effect |
+| --- | --- |
+| Reach Control | Enables interaction range limits. |
+| Doors, Stairways, and Tokens | Enables the range limit for each interaction type. |
+| Maximum range | Sets the limit in grid squares. |
+| Apply to GM-controlled tokens | Applies door or Stairways limits when a GM controls one token. |
+| Reach Control range | Sets an object's range. Use 0 to follow the module setting. |
 
-- **Foundry VTT**: Version 14
-- **Systems**: System-agnostic for Reach Control; PF2e for Target Helper Automations
-- **Optional modules**: PF2e Toolbelt, PF2e Workbench, and Stairways
+## Installation
 
----
+In Foundry VTT, open Add-on Modules, choose Install Module, and enter the [manifest URL](https://github.com/DaavyC/daavy-addons/releases/latest/download/module.json).
 
-## 📚 Credits
+## Compatibility
 
-- **[Arms Reach](https://github.com/p4535992/foundryvtt-arms-reach)** by p4535992
+- Requires Foundry VTT 14.
+- Reach Control works with any game system. Target Helper and Template Helper require PF2e.
+- Stairways range limits require the Stairways module.
 
----
+## Credits
 
-> This module was built with AI-assisted development.
+- [Arms Reach](https://github.com/p4535992/foundryvtt-arms-reach) by p4535992.

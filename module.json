@@ -1,8 +1,9 @@
 {
   "id": "daavy-addons",
   "title": "Daavy's Addons",
-  "description": "<p>This module includes standalone features and integrations that do not require dedicated modules.</p>",
-  "version": "1.1.1",
+  "description": "<p>This module groups features that don’t need separate modules.</p>",
+  "version": "1.2.0",
+  "socket": true,
   "authors": [
     {
       "name": "Daavy",
@@ -19,23 +20,12 @@
     "verified": "14",
     "maximum": "14"
   },
-  "relationships": {
-    "recommends": [
-      {
-        "id": "xdy-pf2e-workbench",
-        "type": "module"
-      },
-      {
-        "id": "pf2e-toolbelt",
-        "type": "module"
-      }
-    ]
-  },
   "esmodules": [
     "scripts/main.js"
   ],
   "styles": [
     "styles/main.css",
+    "styles/settings.css",
     "styles/feedback.css"
   ],
   "languages": [

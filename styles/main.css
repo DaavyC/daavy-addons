@@ -1,94 +1,442 @@
-.daavy-addons-settings-group {
-  border: 1px solid var(--color-border-light-primary, #a1a1a1);
-  border-radius: 5px;
-  margin: 2px 0;
+:root {
+  --template-helper-paper: var(--color-bg-app, #121017);
+  --template-helper-paper-raised: var(--color-bg-option, #1b1720);
+  --template-helper-ink: var(--color-text-primary, #f5eee5);
+  --template-helper-rule: var(--color-border-light-primary, #675762);
 }
 
-.daavy-addons-settings-group-title {
-  background: var(--color-bg-option, rgba(127, 127, 127, 0.12));
-  border-bottom: 1px solid var(--color-border-light-primary, #a1a1a1);
-  border-radius: 4px 4px 0 0;
-  color: var(--color-text-primary, inherit);
-  font-size: var(--font-size-14, 14px);
-  font-weight: bold;
-  margin: 0;
-  padding: 8px 10px;
+.daavy-addons-target-helper {
+  margin-top: 3px;
 }
 
-.daavy-addons-settings-section + .daavy-addons-settings-section {
-  border-top: 1px solid var(--color-border-light-primary, #a1a1a1);
+.daavy-addons-target-helper > hr {
+  margin: 0 0 8px;
 }
 
-.daavy-addons-settings-section-title {
-  background: rgba(127, 127, 127, 0.08);
-  font-size: var(--font-size-13, 13px);
-  margin: 0;
-  padding: 6px 10px;
-}
-
-.daavy-addons-settings-row {
-  border: none;
-  margin: 0;
-  padding: 10px;
-}
-
-.daavy-addons-settings-row + .daavy-addons-settings-row {
-  border-top: 1px solid var(--color-border-light-tertiary, rgba(127, 127, 127, 0.2));
-}
-
-.daavy-addons-target-helper-warning {
-  color: var(--color-level-error, #ff4d4f);
-  display: block;
-  margin-top: 4px;
-}
-
-.daavy-addons-settings-actions {
+.daavy-addons-target-helper-splash-divider {
+  align-items: center;
+  color: var(--color-text-subtle, #666);
   display: flex;
-  gap: 6px;
-  margin: 6px 0 2px;
+  font: inherit;
+  height: 18px;
+  white-space: nowrap;
 }
 
-.daavy-addons-settings-actions button {
+.daavy-addons-target-helper-splash-divider::before,
+.daavy-addons-target-helper-splash-divider::after {
+  border-top: 2px groove white;
+  content: "";
   flex: 1;
 }
 
-button.daavy-addons-donate-action {
-  background: #ff5a16;
-  border-color: #ff8a5c;
-  color: #ffffff;
+.daavy-addons-target-helper-splash-divider::before {
+  margin-right: 0.5rem;
 }
 
-button.daavy-addons-donate-action:hover {
-  background: #e84e0c;
+.daavy-addons-target-helper-splash-divider::after {
+  margin-left: 0.5rem;
 }
 
-button.daavy-addons-discord-action {
-  background: #5662f6;
-  border-color: #7e87ff;
-  color: #ffffff;
+.daavy-addons-target-helper-storage {
+  display: none !important;
 }
 
-button.daavy-addons-discord-action:hover {
-  background: #4652dc;
+.daavy-addons-target-helper-controls {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
-button.daavy-addons-feedback-action {
-  background: #238b82;
-  border-color: #45bdb1;
-  color: #ffffff;
+.pf2e.chat-card > footer:has(> .daavy-addons-target-helper-controls) {
+  align-items: center;
+  display: flex;
 }
 
-button.daavy-addons-feedback-action:hover {
-  background: #2ca69b;
+.daavy-addons-target-helper-row {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
 }
 
-.daavy-addons-settings-actions button:is(:focus, :active) {
+.daavy-addons-target-helper-row + .daavy-addons-target-helper-row {
+  margin-top: 1px;
+}
+
+.daavy-addons-target-helper-name {
+  align-items: center;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  font-weight: bold;
+  height: 24px;
+  justify-content: flex-start;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 2px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daavy-addons-target-helper-actions {
+  display: flex;
+  gap: 1px;
+}
+
+.daavy-addons-target-helper-actions.pending,
+button.daavy-addons-target-helper-save.pending,
+button.daavy-addons-target-helper-undo.pending,
+button.daavy-addons-target-helper-hero-reroll.pending,
+button.daavy-addons-target-helper-control.pending {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+button.daavy-addons-target-helper-action,
+button.daavy-addons-target-helper-save {
+  box-sizing: border-box;
+  height: 24px;
+  margin: 0;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0;
+  width: 24px;
+}
+
+button.daavy-addons-target-helper-action {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 24px;
+  font-size: var(--font-size-12, 12px);
+  font-weight: bold;
+  justify-content: center;
+  line-height: 1;
+}
+
+button.daavy-addons-target-helper-action.healing > .fa-stack {
+  font-size: 0.5em;
+  height: 2em;
+  line-height: 2em;
+  width: 2em;
+}
+
+button.daavy-addons-target-helper-action.recommended {
+  outline: 2px solid var(--color-warm-2);
+  outline-offset: -2px;
+}
+
+button.daavy-addons-target-helper-action.half > i {
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-image: linear-gradient(to right, currentColor 50%, #999 50%);
+}
+
+button.daavy-addons-target-helper-action > img {
+  border: 0;
+  height: var(--font-size-16, 16px);
+  width: var(--font-size-16, 16px);
+}
+
+button.daavy-addons-target-helper-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+button.daavy-addons-target-helper-save {
+  flex: 0 0 auto;
+  font-size: inherit;
+}
+
+button:is(
+  .daavy-addons-target-helper-undo,
+  .daavy-addons-target-helper-hero-reroll,
+  .daavy-addons-target-helper-control
+) {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 24px;
+  font-size: inherit;
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  min-height: 0;
+  min-width: 24px;
+  padding: 0;
+  width: 24px;
+}
+
+button.daavy-addons-target-helper-hero-reroll {
+  color: #000;
+}
+
+.dice-total:has(> button.daavy-addons-target-helper-strike-reroll) {
+  position: relative;
+}
+
+button.daavy-addons-target-helper-strike-reroll {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+button:is(
+  .daavy-addons-target-helper-undo,
+  .daavy-addons-target-helper-hero-reroll,
+  .daavy-addons-target-helper-control
+):is(:hover, :focus, :active) {
+  background: transparent;
+  border: 0;
   box-shadow: none;
   outline: none;
 }
 
-.daavy-addons-settings-actions button:focus-visible {
+button:is(
+  .daavy-addons-target-helper-undo,
+  .daavy-addons-target-helper-hero-reroll,
+  .daavy-addons-target-helper-control
+):not(:disabled):is(:hover, :active, :focus-visible) > :is(i, img) {
+  filter: drop-shadow(0 0 2px var(--color-warm-2));
+}
+
+button:is(
+  .daavy-addons-target-helper-undo,
+  .daavy-addons-target-helper-hero-reroll,
+  .daavy-addons-target-helper-control
+):disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.daavy-addons-target-helper-damage-result {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1px;
+}
+
+.daavy-addons-target-helper-damage-result .iwr {
+  background: transparent;
+  border: 0;
   box-shadow: none;
-  outline: 2px solid #4a90e2;
+  cursor: help;
+  display: inline-flex;
+  line-height: 1;
+  outline: 0;
+  padding: 0;
+}
+
+.daavy-addons-target-helper-damage-result .iwr > i {
+  margin: 0;
+}
+
+.daavy-addons-target-helper-damage-amount {
+  border-right: 2px groove white;
+  font-size: inherit;
+  padding: 0 var(--space-4) 0 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.daavy-addons-target-helper-damage-amount.damage {
+  color: #ff0000;
+}
+
+.daavy-addons-target-helper-damage-amount.healing {
+  color: #008000;
+}
+
+.daavy-addons-target-helper-damage-amount.zero {
+  color: var(--color-text-subtle, #999);
+}
+
+.daavy-addons-target-helper-save-result {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: inherit;
+  gap: 1px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.daavy-addons-target-helper-save-label {
+  border-right: 2px groove white;
+  margin-right: calc(var(--space-4) - 1px);
+  padding: 0 var(--space-4) 0 0;
+}
+
+.daavy-addons-target-helper-save-result > span:last-child {
+  flex: 0 0 2ch;
+  text-align: right;
+}
+
+.daavy-addons-target-helper-save-result.criticalFailure {
+  color: var(--color-pf-text-critical-failure);
+}
+
+.daavy-addons-target-helper-save-result.failure {
+  color: var(--color-pf-text-failure);
+}
+
+.daavy-addons-target-helper-save-result.success {
+  color: var(--color-pf-text-success);
+}
+
+.daavy-addons-target-helper-save-result.criticalSuccess {
+  color: var(--color-pf-text-critical-success);
+}
+
+.daavy-addons-target-helper-save-result.healing {
+  color: rgb(255, 105, 180);
+}
+
+.daavy-addons-target-helper-save-result.hidden-result {
+  color: var(--color-text-subtle, #999);
+}
+
+.daavy-addons-target-helper .daavy-addons-target-helper-waiting-variant {
+  color: #666 !important;
+}
+
+.daavy-addons-target-helper .daavy-addons-target-helper-waiting-variant.light-colors {
+  color: #a8adb7 !important;
+}
+
+.application:has(.daavy-addons-template-targeting-button) {
+  background: var(--template-helper-paper);
+  border: 1px solid var(--template-helper-rule);
+  border-radius: 10px;
+  box-shadow: 0 16px 44px rgb(0 0 0 / 45%);
+  color: var(--template-helper-ink);
+  height: fit-content !important;
+  max-width: min(26rem, calc(100% - 24px));
+  min-height: 0 !important;
+  overflow: hidden;
+  width: min(26rem, calc(100% - 24px));
+}
+
+.application:has(.daavy-addons-template-targeting-button) .window-header {
+  background: var(--template-helper-paper);
+  border-bottom: 1px solid color-mix(in srgb, var(--template-helper-rule) 70%, transparent);
+  min-height: 44px;
+  padding: 0 12px 0 16px;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .window-title {
+  color: var(--template-helper-ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .window-content {
+  background: var(--template-helper-paper);
+  min-height: 0;
+  padding: 16px;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .window-content > form.dialog-form {
+  gap: 0;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer {
+  background: var(--template-helper-paper);
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button {
+  align-items: center;
+  background: var(--template-helper-paper-raised);
+  border: 1px solid var(--template-helper-rule);
+  border-radius: 7px;
+  box-shadow: none;
+  color: var(--template-helper-ink);
+  display: grid;
+  font-size: 0.9rem;
+  font-weight: 700;
+  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  justify-content: initial;
+  min-height: 44px;
+  padding: 0 12px;
+  text-align: left;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  white-space: nowrap;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button > i {
+  color: var(--button-accent);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button::after {
+  color: var(--color-text-secondary, #b8aeb5);
+  content: "›";
+  font-size: 1.35rem;
+  font-weight: 400;
+  line-height: 1;
+  text-align: right;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button.allies {
+  --button-accent: #6fcf9b;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button.enemies {
+  --button-accent: #e27c78;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button.all {
+  --button-accent: #d9b16c;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button:hover {
+    background: color-mix(in srgb, var(--button-accent) 12%, var(--template-helper-paper-raised));
+    border-color: var(--button-accent);
+    transform: translateY(-1px);
+  }
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button:focus-visible {
+  outline: 2px solid var(--color-warm-2, #e4b86f);
   outline-offset: 2px;
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button:active {
+  transform: translateY(1px);
+}
+
+.application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button {
+    transition: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .application:has(.daavy-addons-template-targeting-button) .form-footer button.daavy-addons-template-targeting-button {
+    min-height: 52px;
+  }
 }
