@@ -113,9 +113,13 @@
       "PhobiaGuard": {
         "Name": "Phobia Guard",
         "Hint": "Let users hide token images that trigger their phobias.",
-        "HideTriggers": {
-          "Name": "Hide phobia triggers",
-          "Hint": "Replace the image of tokens marked as phobia triggers with a green wave effect. This setting affects only you."
+        "Tags": {
+          "Name": "Phobia tags",
+          "Hint": "Tags you can assign to tokens. Each user chooses which of them to hide."
+        },
+        "HiddenTags": {
+          "Name": "Hidden phobia tags",
+          "Hint": "Replace the image of tokens with these tags with a green wave effect. This setting affects only you."
         }
       }
     },
@@ -173,8 +177,9 @@
     },
     "PhobiaGuard": {
       "TokenConfig": {
-        "Label": "Phobia trigger",
-        "Hint": "Hide this token's image from users who turn on \"Hide phobia triggers\"."
+        "Label": "Phobia tags",
+        "Hint": "Hide this token's image from users who hide any of these tags.",
+        "NoTags": "No phobia tags are defined. Add them in the module settings."
       }
     },
     "Feedback": {

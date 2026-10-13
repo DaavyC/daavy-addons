@@ -5,6 +5,7 @@ import {
   SETTING_DEFINITIONS,
   SETTINGS,
 } from "./constants.js";
+import { getGlobalTagChoices } from "./features/phobia-guard.js";
 import { getSetting } from "./utils.js";
 
 const INCOMPATIBLE_SETTINGS = [
@@ -25,11 +26,21 @@ const INCOMPATIBLE_SETTINGS = [
   }
 ];
 
+function createTagsField(globalTagChoices) {
+  const { SetField, StringField } = foundry.data.fields;
+  return new SetField(new StringField({
+    blank: false,
+    ...(globalTagChoices ? { choices: getGlobalTagChoices } : {})
+  }));
+}
+
 export function registerSettings() {
-  for (const [key, { label, defaultValue, scope = "world", ...options }] of Object.entries(SETTING_DEFINITIONS)) {
-    const type = typeof defaultValue === "boolean"
-      ? Boolean
-      : typeof defaultValue === "number" ? Number : String;
+  for (const [key, { label, defaultValue, scope = "world", globalTagChoices, ...options }] of Object.entries(SETTING_DEFINITIONS)) {
+    const type = Array.isArray(defaultValue)
+      ? createTagsField(globalTagChoices)
+      : typeof defaultValue === "boolean"
+        ? Boolean
+        : typeof defaultValue === "number" ? Number : String;
     game.settings.register(MODULE_ID, key, {
       name: `DAAVY_ADDONS.Settings.${label}.Name`,
       hint: `DAAVY_ADDONS.Settings.${label}.Hint`,
@@ -138,12 +149,14 @@ function organizeReachSettings(html) {
 }
 
 function organizePhobiaGuardSettings(html) {
-  const hideTriggersRow = findSettingRow(html, SETTINGS.PHOBIA_GUARD_HIDE_TRIGGERS);
-  if (!hideTriggersRow) return;
+  const tagRows = [SETTINGS.PHOBIA_GUARD_TAGS, SETTINGS.PHOBIA_GUARD_HIDDEN_TAGS]
+    .map((key) => findSettingRow(html, key))
+    .filter(Boolean);
+  if (!tagRows.length) return;
 
   const phobiaGuardGroup = createGroup(html.ownerDocument, "PhobiaGuard");
-  hideTriggersRow.replaceWith(phobiaGuardGroup);
-  appendRows(phobiaGuardGroup, [hideTriggersRow]);
+  tagRows[0].replaceWith(phobiaGuardGroup);
+  appendRows(phobiaGuardGroup, tagRows);
   configureVisibility(html, SETTINGS.PHOBIA_GUARD, [phobiaGuardGroup]);
 }
 

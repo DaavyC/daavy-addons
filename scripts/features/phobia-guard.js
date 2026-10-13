@@ -1,8 +1,8 @@
 import { MODULE_ID, SETTINGS } from "../constants.js";
 import { getSetting } from "../utils.js";
 
-const PHOBIA_TRIGGER_FLAG = "phobiaTrigger";
-const PHOBIA_TRIGGER_PATH = `flags.${MODULE_ID}.${PHOBIA_TRIGGER_FLAG}`;
+const PHOBIA_TAGS_FLAG = "phobiaTags";
+const PHOBIA_TAGS_PATH = `flags.${MODULE_ID}.${PHOBIA_TAGS_FLAG}`;
 const PHOBIA_TRIGGER_IMAGE = `modules/${MODULE_ID}/assets/phobia-trigger.svg`;
 const PHOBIA_TRIGGER_COLOR = [0.55, 0.85, 0.65, 1];
 
@@ -12,16 +12,29 @@ function isPhobiaGuardEnabled() {
   return getSetting(SETTINGS.PHOBIA_GUARD) === true;
 }
 
-function areTriggersHidden() {
-  return isPhobiaGuardEnabled() && getSetting(SETTINGS.PHOBIA_GUARD_HIDE_TRIGGERS) === true;
+function getGlobalTags() {
+  return [...getSetting(SETTINGS.PHOBIA_GUARD_TAGS)];
 }
 
-function isPhobiaTrigger(token) {
-  return token.getFlag(MODULE_ID, PHOBIA_TRIGGER_FLAG) === true;
+export function getGlobalTagChoices() {
+  return Object.fromEntries(getGlobalTags().map((tag) => [tag, tag]));
+}
+
+function getTokenTags(token) {
+  return token.getFlag(MODULE_ID, PHOBIA_TAGS_FLAG) ?? [];
+}
+
+function getHiddenTags() {
+  const globalTags = new Set(getGlobalTags());
+  return new Set([...getSetting(SETTINGS.PHOBIA_GUARD_HIDDEN_TAGS)].filter((tag) => globalTags.has(tag)));
 }
 
 function shouldHideTrigger(tokenDocument) {
-  return isPhobiaTrigger(tokenDocument) && areTriggersHidden();
+  if (!isPhobiaGuardEnabled()) return false;
+  const tokenTags = getTokenTags(tokenDocument);
+  if (!tokenTags.length) return false;
+  const hiddenTags = getHiddenTags();
+  return tokenTags.some((tag) => hiddenTags.has(tag));
 }
 
 function getTriggerFilter() {
@@ -61,7 +74,7 @@ export function registerPhobiaGuardTokenClasses() {
 }
 
 export function refreshTriggerImage(token, changes) {
-  if (!foundry.utils.hasProperty(changes, PHOBIA_TRIGGER_PATH) || !areTriggersHidden()) return;
+  if (!foundry.utils.hasProperty(changes, PHOBIA_TAGS_PATH) || !isPhobiaGuardEnabled()) return;
   token.reset();
   token.object?.renderFlags.set({ redraw: true });
   if (!token.combatant) return;
@@ -69,19 +82,27 @@ export function refreshTriggerImage(token, changes) {
   ui.combat.render();
 }
 
-export function addPhobiaTriggerField(app, html) {
-  if (!isPhobiaGuardEnabled() || html.querySelector("[data-phobia-trigger]")) return;
+export function addPhobiaTagsField(app, html) {
+  if (!isPhobiaGuardEnabled() || html.querySelector("[data-phobia-tags]")) return;
   const imageRow = html.querySelector('[name="texture.src"]')?.closest(".form-group");
   if (!imageRow) return;
 
-  const { createCheckboxInput, createFormGroup } = foundry.applications.fields;
+  const globalTags = getGlobalTags();
+  const { createMultiSelectInput, createFormGroup } = foundry.applications.fields;
   const group = createFormGroup({
-    input: createCheckboxInput({ name: PHOBIA_TRIGGER_PATH, value: isPhobiaTrigger(app.token) }),
+    input: createMultiSelectInput({
+      name: PHOBIA_TAGS_PATH,
+      options: globalTags.map((tag) => ({ value: tag, label: tag })),
+      value: getTokenTags(app.token).filter((tag) => globalTags.includes(tag))
+    }),
     label: "DAAVY_ADDONS.PhobiaGuard.TokenConfig.Label",
-    hint: "DAAVY_ADDONS.PhobiaGuard.TokenConfig.Hint",
+    hint: globalTags.length
+      ? "DAAVY_ADDONS.PhobiaGuard.TokenConfig.Hint"
+      : "DAAVY_ADDONS.PhobiaGuard.TokenConfig.NoTags",
     rootId: app.id,
+    stacked: true,
     localize: true
   });
-  group.dataset.phobiaTrigger = "";
+  group.dataset.phobiaTags = "";
   imageRow.after(group);
 }

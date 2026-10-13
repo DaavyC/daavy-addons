@@ -1,3 +1,7 @@
+##### 1.3.1
+
+- Phobia Guard now uses tags. The GM defines the tags and assigns them to tokens, and each user chooses which tags to hide. Hide phobia triggers and the Phobia trigger token option no longer exist, so tokens marked with them must be tagged again.
+
 ##### 1.3.0
 
 - Added Phobia Guard. You can mark a token as a phobia trigger in its configuration. Users who turn on Hide phobia triggers see a green wave effect instead of that token's image.

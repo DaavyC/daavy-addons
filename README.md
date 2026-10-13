@@ -12,7 +12,7 @@ This module groups features that don’t need separate modules.
 
 - **Target Helper (PF2e):** Adds save, damage, healing, and undo controls to chat cards. Optional automation requires an active GM. Hero Point rerolls can update damage, and Template Helper adds targets from spell templates.
 - **Reach Control:** Limits interactions with doors, Stairways, and tokens by distance in grid squares. Each object can override the module's range.
-- **Phobia Guard:** Lets each user replace the images of tokens marked as phobia triggers with a green wave effect. Only that user sees the change.
+- **Phobia Guard:** The GM defines phobia tags and assigns them to tokens. Each user chooses which tags to hide, and tokens with those tags show a green wave effect instead of their image. Only that user sees the change.
 
 ## Settings
 
@@ -43,8 +43,9 @@ This module groups features that don’t need separate modules.
 | Setting | Effect |
 | --- | --- |
 | Phobia Guard | Enables the feature for the world. Requires a reload. |
-| Hide phobia triggers | Replaces the image of marked tokens with a green wave effect. Applies only to you and requires a reload. |
-| Phobia trigger | Marks a token as a phobia trigger. Appears in the token and prototype token configuration. |
+| Phobia tags | Defines the tags available in the world. Only the GM can edit them. Requires a reload. |
+| Hidden phobia tags | Chooses which of the GM's tags to hide. Tokens with any of them show a green wave effect. Applies only to you and requires a reload. |
+| Phobia tags (token) | Assigns tags to a token. Appears in the token and prototype token configuration. |
 
 ## Installation
 

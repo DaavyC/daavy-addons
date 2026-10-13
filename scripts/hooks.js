@@ -5,7 +5,7 @@ import {
   installInteractionWrappers
 } from "./features/reach-control.js";
 import {
-  addPhobiaTriggerField,
+  addPhobiaTagsField,
   refreshTriggerImage,
   registerPhobiaGuardTokenClasses
 } from "./features/phobia-guard.js";
@@ -58,6 +58,6 @@ export function registerHooks() {
   Hooks.on("updateUser", handleUpdateUser);
 
   Hooks.on("updateToken", refreshTriggerImage);
-  Hooks.on("renderTokenConfig", addPhobiaTriggerField);
-  Hooks.on("renderPrototypeTokenConfig", addPhobiaTriggerField);
+  Hooks.on("renderTokenConfig", addPhobiaTagsField);
+  Hooks.on("renderPrototypeTokenConfig", addPhobiaTagsField);
 }
