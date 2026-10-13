@@ -4,7 +4,8 @@
       "Groups": {
         "Features": "Features",
         "TargetHelper": "Target Helper",
-        "ReachControl": "Reach Control"
+        "ReachControl": "Reach Control",
+        "PhobiaGuard": "Phobia Guard"
       },
       "Sections": {
         "TemplateHelper": "Template Helper",
@@ -108,6 +109,14 @@
             "Hint": "Maximum token interaction range in grid squares."
           }
         }
+      },
+      "PhobiaGuard": {
+        "Name": "Phobia Guard",
+        "Hint": "Let users hide token images that trigger their phobias.",
+        "HideTriggers": {
+          "Name": "Hide phobia triggers",
+          "Hint": "Replace the image of tokens marked as phobia triggers with a green wave effect. This setting affects only you."
+        }
       }
     },
     "TargetHelper": {
@@ -160,6 +169,12 @@
       "PerObjectRange": {
         "Label": "Reach Control range",
         "Hint": "Set the range in grid squares. Use 0 to follow the module setting."
+      }
+    },
+    "PhobiaGuard": {
+      "TokenConfig": {
+        "Label": "Phobia trigger",
+        "Hint": "Hide this token's image from users who turn on \"Hide phobia triggers\"."
       }
     },
     "Feedback": {

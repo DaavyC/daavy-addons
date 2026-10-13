@@ -16,7 +16,9 @@ export const SETTINGS = {
   REACH_STAIRWAY_RANGE: "reachControlStairwayRange",
   REACH_STAIRWAYS_AFFECT_GM: "reachControlStairwaysAffectGM",
   REACH_TOKENS: "reachControlTokens",
-  REACH_TOKEN_RANGE: "reachControlTokenRange"
+  REACH_TOKEN_RANGE: "reachControlTokenRange",
+  PHOBIA_GUARD: "phobiaGuard",
+  PHOBIA_GUARD_HIDE_TRIGGERS: "phobiaGuardHideTriggers"
 };
 
 export const TARGET_HELPER_COLOR_SCHEMES = {
@@ -93,7 +95,14 @@ export const SETTING_DEFINITIONS = {
   [SETTINGS.REACH_STAIRWAY_RANGE]: { label: "ReachControl.Stairways.Range", defaultValue: 1 },
   [SETTINGS.REACH_STAIRWAYS_AFFECT_GM]: { label: "ReachControl.Stairways.AffectGM", defaultValue: false },
   [SETTINGS.REACH_TOKENS]: { label: "ReachControl.Tokens.Enabled", defaultValue: true },
-  [SETTINGS.REACH_TOKEN_RANGE]: { label: "ReachControl.Tokens.Range", defaultValue: 1 }
+  [SETTINGS.REACH_TOKEN_RANGE]: { label: "ReachControl.Tokens.Range", defaultValue: 1 },
+  [SETTINGS.PHOBIA_GUARD]: { label: "PhobiaGuard", defaultValue: false, requiresReload: true },
+  [SETTINGS.PHOBIA_GUARD_HIDE_TRIGGERS]: {
+    label: "PhobiaGuard.HideTriggers",
+    defaultValue: false,
+    scope: "user",
+    requiresReload: true
+  }
 };
 
 export const REACH_RANGE = {

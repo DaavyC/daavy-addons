@@ -12,6 +12,7 @@ This module groups features that don’t need separate modules.
 
 - **Target Helper (PF2e):** Adds save, damage, healing, and undo controls to chat cards. Optional automation requires an active GM. Hero Point rerolls can update damage, and Template Helper adds targets from spell templates.
 - **Reach Control:** Limits interactions with doors, Stairways, and tokens by distance in grid squares. Each object can override the module's range.
+- **Phobia Guard:** Lets each user replace the images of tokens marked as phobia triggers with a green wave effect. Only that user sees the change.
 
 ## Settings
 
@@ -37,6 +38,14 @@ This module groups features that don’t need separate modules.
 | Apply to GM-controlled tokens | Applies door or Stairways limits when a GM controls one token. |
 | Reach Control range | Sets an object's range. Use 0 to follow the module setting. |
 
+### Phobia Guard
+
+| Setting | Effect |
+| --- | --- |
+| Phobia Guard | Enables the feature for the world. Requires a reload. |
+| Hide phobia triggers | Replaces the image of marked tokens with a green wave effect. Applies only to you and requires a reload. |
+| Phobia trigger | Marks a token as a phobia trigger. Appears in the token and prototype token configuration. |
+
 ## Installation
 
 In Foundry VTT, open Add-on Modules, choose Install Module, and enter the manifest URL:
@@ -46,7 +55,7 @@ In Foundry VTT, open Add-on Modules, choose Install Module, and enter the manife
 ## Compatibility
 
 - Requires Foundry VTT 14.
-- Reach Control works with any game system. Target Helper and Template Helper require PF2e.
+- Reach Control and Phobia Guard work with any game system. Target Helper and Template Helper require PF2e.
 - Stairways range limits require the Stairways module.
 
 ## Credits

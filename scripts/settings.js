@@ -57,10 +57,12 @@ export function handleSettingUpdate(setting) {
 }
 
 export function organizeSettingsConfig(html) {
-  if (!html || html.querySelector('[data-settings-group="Features"]')) return;
+  if (!html || html.querySelector("[data-settings-group]")) return;
+
+  organizePhobiaGuardSettings(html);
 
   const documentRef = html.ownerDocument;
-  const featureRows = [SETTINGS.TARGET_HELPER, SETTINGS.REACH_CONTROL]
+  const featureRows = [SETTINGS.TARGET_HELPER, SETTINGS.REACH_CONTROL, SETTINGS.PHOBIA_GUARD]
     .map((key) => findSettingRow(html, key))
     .filter(Boolean);
   if (!featureRows.length) return;
@@ -133,6 +135,16 @@ function organizeReachSettings(html) {
       .filter(Boolean)
       .map((key) => findSettingRow(html, key)));
   }
+}
+
+function organizePhobiaGuardSettings(html) {
+  const hideTriggersRow = findSettingRow(html, SETTINGS.PHOBIA_GUARD_HIDE_TRIGGERS);
+  if (!hideTriggersRow) return;
+
+  const phobiaGuardGroup = createGroup(html.ownerDocument, "PhobiaGuard");
+  hideTriggersRow.replaceWith(phobiaGuardGroup);
+  appendRows(phobiaGuardGroup, [hideTriggersRow]);
+  configureVisibility(html, SETTINGS.PHOBIA_GUARD, [phobiaGuardGroup]);
 }
 
 function findSettingRow(container, key) {

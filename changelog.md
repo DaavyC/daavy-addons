@@ -1,3 +1,7 @@
+##### 1.3.0
+
+- Added Phobia Guard. You can mark a token as a phobia trigger in its configuration. Users who turn on Hide phobia triggers see a green wave effect instead of that token's image.
+
 ##### 1.2.0
 
 - Added a built-in Target Helper with optional automation.

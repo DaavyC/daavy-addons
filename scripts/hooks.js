@@ -5,6 +5,11 @@ import {
   installInteractionWrappers
 } from "./features/reach-control.js";
 import {
+  addPhobiaTriggerField,
+  refreshTriggerImage,
+  registerPhobiaGuardTokenClasses
+} from "./features/phobia-guard.js";
+import {
   captureTargets,
   handleCreateChatMessageHook,
   handleCreateRegion,
@@ -23,7 +28,10 @@ import {
 } from "./settings.js";
 
 export function registerHooks() {
-  Hooks.once("init", registerSettings);
+  Hooks.once("init", () => {
+    registerSettings();
+    registerPhobiaGuardTokenClasses();
+  });
   Hooks.once("setup", installInteractionWrappers);
   Hooks.once("ready", () => {
     void checkIncompatibleSettings();
@@ -48,4 +56,8 @@ export function registerHooks() {
   Hooks.on("renderChatMessageHTML", renderTargetHelper);
   Hooks.on("createRegion", handleCreateRegion);
   Hooks.on("updateUser", handleUpdateUser);
+
+  Hooks.on("updateToken", refreshTriggerImage);
+  Hooks.on("renderTokenConfig", addPhobiaTriggerField);
+  Hooks.on("renderPrototypeTokenConfig", addPhobiaTriggerField);
 }
