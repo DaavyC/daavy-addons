@@ -19,7 +19,10 @@ export const SETTINGS = {
   REACH_TOKEN_RANGE: "reachControlTokenRange",
   PHOBIA_GUARD: "phobiaGuard",
   PHOBIA_GUARD_TAGS: "phobiaGuardTags",
-  PHOBIA_GUARD_HIDDEN_TAGS: "phobiaGuardHiddenTags"
+  PHOBIA_GUARD_HIDDEN_TAGS: "phobiaGuardHiddenTags",
+  TOKEN_SYNC: "tokenSync",
+  SCENE_DEFAULTS: "sceneDefaults",
+  SCENE_DEFAULTS_VALUES: "sceneDefaultsValues"
 };
 
 export const TARGET_HELPER_COLOR_SCHEMES = {
@@ -105,7 +108,10 @@ export const SETTING_DEFINITIONS = {
     scope: "user",
     globalTagChoices: true,
     requiresReload: true
-  }
+  },
+  [SETTINGS.TOKEN_SYNC]: { label: "TokenSync", defaultValue: false },
+  [SETTINGS.SCENE_DEFAULTS]: { label: "SceneDefaults", defaultValue: false },
+  [SETTINGS.SCENE_DEFAULTS_VALUES]: { label: "SceneDefaults.Values", defaultValue: {}, config: false }
 };
 
 export const REACH_RANGE = {

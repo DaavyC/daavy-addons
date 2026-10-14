@@ -1,3 +1,8 @@
+##### 1.4.0
+
+- Added Token Sync. When a character or NPC changes its name, its prototype token and existing tokens on every scene follow. When its prototype token image changes, existing tokens receive the new image. You can no longer edit the token name.
+- Added Scene Defaults. Scene configuration shows a star on supported settings. Click it to use the current value as the default for new scenes.
+
 ##### 1.3.1
 
 - Phobia Guard now uses tags. The GM defines the tags and assigns them to tokens, and each user chooses which tags to hide. Hide phobia triggers and the Phobia trigger token option no longer exist, so tokens marked with them must be tagged again.

@@ -440,3 +440,32 @@ button:is(
     min-height: 52px;
   }
 }
+
+:is(label, .label):has(> .daavy-addons-scene-default) {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.application button.daavy-addons-scene-default {
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--color-text-subtle, inherit);
+  cursor: pointer;
+  flex: none;
+  height: auto;
+  line-height: 1;
+  margin: 0;
+  outline: none;
+  padding: 0;
+  width: auto;
+}
+
+.application button.daavy-addons-scene-default:is(:hover, :focus-visible) {
+  color: var(--color-warm-2, #e4b86f);
+}
+
+.application button.daavy-addons-scene-default.active {
+  color: var(--color-warm-2, #e4b86f);
+}

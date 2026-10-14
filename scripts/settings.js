@@ -34,13 +34,17 @@ function createTagsField(globalTagChoices) {
   }));
 }
 
+function resolveSettingType(defaultValue, globalTagChoices) {
+  if (Array.isArray(defaultValue)) return createTagsField(globalTagChoices);
+  if (typeof defaultValue === "boolean") return Boolean;
+  if (typeof defaultValue === "number") return Number;
+  if (typeof defaultValue === "object") return new foundry.data.fields.ObjectField();
+  return String;
+}
+
 export function registerSettings() {
   for (const [key, { label, defaultValue, scope = "world", globalTagChoices, ...options }] of Object.entries(SETTING_DEFINITIONS)) {
-    const type = Array.isArray(defaultValue)
-      ? createTagsField(globalTagChoices)
-      : typeof defaultValue === "boolean"
-        ? Boolean
-        : typeof defaultValue === "number" ? Number : String;
+    const type = resolveSettingType(defaultValue, globalTagChoices);
     game.settings.register(MODULE_ID, key, {
       name: `DAAVY_ADDONS.Settings.${label}.Name`,
       hint: `DAAVY_ADDONS.Settings.${label}.Hint`,
@@ -73,7 +77,13 @@ export function organizeSettingsConfig(html) {
   organizePhobiaGuardSettings(html);
 
   const documentRef = html.ownerDocument;
-  const featureRows = [SETTINGS.TARGET_HELPER, SETTINGS.REACH_CONTROL, SETTINGS.PHOBIA_GUARD]
+  const featureRows = [
+    SETTINGS.TARGET_HELPER,
+    SETTINGS.REACH_CONTROL,
+    SETTINGS.SCENE_DEFAULTS,
+    SETTINGS.TOKEN_SYNC,
+    SETTINGS.PHOBIA_GUARD
+  ]
     .map((key) => findSettingRow(html, key))
     .filter(Boolean);
   if (!featureRows.length) return;

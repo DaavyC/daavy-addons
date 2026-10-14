@@ -20,6 +20,12 @@ import {
   prepareSpellVariant,
   renderTargetHelper
 } from "./features/target-helper.js";
+import { addSceneDefaultButtons, applySceneDefaults } from "./features/scene-defaults.js";
+import {
+  lockTokenName,
+  syncPrototypeToken,
+  syncSceneTokens
+} from "./features/token-sync.js";
 import {
   checkIncompatibleSettings,
   handleSettingUpdate,
@@ -60,4 +66,12 @@ export function registerHooks() {
   Hooks.on("updateToken", refreshTriggerImage);
   Hooks.on("renderTokenConfig", addPhobiaTagsField);
   Hooks.on("renderPrototypeTokenConfig", addPhobiaTagsField);
+
+  Hooks.on("preUpdateActor", syncPrototypeToken);
+  Hooks.on("updateActor", syncSceneTokens);
+  Hooks.on("renderTokenConfig", lockTokenName);
+  Hooks.on("renderPrototypeTokenConfig", lockTokenName);
+
+  Hooks.on("preCreateScene", applySceneDefaults);
+  Hooks.on("renderSceneConfig", addSceneDefaultButtons);
 }

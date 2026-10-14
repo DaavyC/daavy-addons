@@ -121,6 +121,14 @@
           "Name": "Hidden phobia tags",
           "Hint": "Replace the image of tokens with these tags with a green wave effect. This setting affects only you."
         }
+      },
+      "SceneDefaults": {
+        "Name": "Scene Defaults",
+        "Hint": "Add a star to each supported setting in Scene configuration. Click it to use the setting's current value as the default for new scenes."
+      },
+      "TokenSync": {
+        "Name": "Token Sync",
+        "Hint": "Copy an actor's name to its prototype token and to its existing tokens on every scene. Prototype token image changes also update those tokens. Locks the token name field. Affects characters and NPCs."
       }
     },
     "TargetHelper": {
@@ -181,6 +189,13 @@
         "Hint": "Hide this token's image from users who hide any of these tags.",
         "NoTags": "No phobia tags are defined. Add them in the module settings."
       }
+    },
+    "SceneDefaults": {
+      "Set": "Set as default for new scenes",
+      "Remove": "Remove default for new scenes"
+    },
+    "TokenSync": {
+      "NameLocked": "Token Sync sets this name from the actor."
     },
     "Feedback": {
       "MenuLabel": "Send feedback",
